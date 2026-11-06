@@ -165,6 +165,13 @@ class ModelLoader {
         })));
     }
 
+    // El tamaño de cada modelo se mide una vez: recorrer sus vértices es caro
+    baseBox(type, model) {
+        if (!this.boxes) this.boxes = {};
+        if (!this.boxes[type]) this.boxes[type] = this.skinnedBox(model);
+        return this.boxes[type];
+    }
+
     // Caja de la malla deformada por los huesos. Box3.setFromObject mira la geometría
     // cruda y, en modelos con el esqueleto a otra escala, da un tamaño equivocado.
     skinnedBox(root) {

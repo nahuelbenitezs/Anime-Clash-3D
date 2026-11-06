@@ -155,14 +155,14 @@ class Game {
         const types = Object.keys(FIGHTER_STATS);
         this.backdrop = types.map((type, i) => {
             const f = new Fighter(type, true, this.scene, this.vfx, {});
-            f.position.set(-0.6 + i * 2.6, 0, -1 + (i % 2) * 1.2);
+            f.position.set(0.8 + i * 2.35, 0, -1 + (i % 2) * 1.2);
             f.group.position.copy(f.position);
             f.group.rotation.y = -0.25;
             f.rotationY = f.targetRotationY = -0.25;
             return f;
         });
-        this.camera.position.set(1.6, 2.5, 10.5);
-        this.camera.lookAt(1.6, 1.4, 0);
+        this.camera.position.set(0.8, 2.5, 10.5);
+        this.camera.lookAt(0.8, 1.4, 0);
     }
 
     clearBackdrop() {
@@ -227,6 +227,7 @@ class Game {
         ['hud', 'touch-controls', 'btn-pause'].forEach(id => {
             document.getElementById(id).classList.toggle('hidden', !visible);
         });
+        document.body.classList.toggle('in-battle', visible);
     }
 
     // ─────────────────────────────────────────────
@@ -330,6 +331,7 @@ class Game {
             this.resumeState = this.state;
             this.state = 'paused';
             pauseScreen.classList.remove('hidden');
+            document.body.classList.add('is-paused');
             window.soundManager.stopMusic();
             window.soundManager.stopKiCharge();
             if (this.player) this.player.isCharging = false;
@@ -337,6 +339,7 @@ class Game {
         } else if (this.state === 'paused') {
             this.state = this.resumeState;
             pauseScreen.classList.add('hidden');
+            document.body.classList.remove('is-paused');
             window.soundManager.init();
             window.soundManager.startMusic();
             [this.player, this.enemy].forEach(f => {
@@ -351,6 +354,7 @@ class Game {
         this.clearFighters();
         this.vfx.clear();
         document.getElementById('pause-screen').classList.add('hidden');
+        document.body.classList.remove('is-paused');
         this.announcerEl.classList.add('hidden');
         this.setBattleUI(false);
         window.soundManager.stopMusic();

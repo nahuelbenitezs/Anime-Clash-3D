@@ -262,7 +262,7 @@ class VFXManager {
         head.position.z = length;
         head.scale.setScalar(radius * 1.25);
         const muzzle = new THREE.Mesh(this.shared.sphere, shellMat);
-        muzzle.scale.setScalar(radius * 1.1);
+        muzzle.scale.setScalar(radius * 0.62);
         group.add(head, muzzle);
 
         group.position.copy(startPos);
@@ -426,6 +426,7 @@ class VFXManager {
             beam.shell.visible = false;
             beam.core.visible = false;
             beam.head.visible = false;
+            beam.muzzle.visible = false;
             beam.sparkTimer += dt;
             if (beam.sparkTimer > 0.012) {
                 beam.sparkTimer = 0;
@@ -468,7 +469,7 @@ class VFXManager {
                 }
             }
         }
-        beam.muzzle.scale.setScalar(r * 1.05 * pulse * fade);
+        beam.muzzle.scale.setScalar(r * (kind === 'bolt' ? 0.4 : 0.62) * pulse * fade);
         beam.ownMaterials[0].opacity = 0.92 * fade;
         beam.ownMaterials[1].opacity = fade;
     }

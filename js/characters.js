@@ -459,7 +459,10 @@ class Fighter {
         this.scene.add(this.group);
 
         this.joints = {};
-        this.buildModel();
+        // El modelo de respaldo solo se construye si hace falta: dibujar sus caras en
+        // canvas lleva tiempo y frenaría el inicio de cada ronda.
+        const hasModelReady = window.modelLoader && window.modelLoader.cache[type];
+        if (!hasModelReady) this.buildModel();
 
         this.auraColor = this.stats.aura;
 
@@ -506,7 +509,7 @@ class Fighter {
 
         // Escala y apoyo en el piso a partir de la malla ya deformada por los huesos y
         // en la pose base: el bounding box común mira la geometría cruda y da otra escala.
-        const box = window.modelLoader.skinnedBox(model);
+        const box = window.modelLoader.baseBox(this.type, model);
         const size = box.getSize(new THREE.Vector3());
         const scale = this.stats.height / (size.y || 1);
         model.scale.setScalar(scale);

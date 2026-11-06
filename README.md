@@ -1,68 +1,72 @@
-# ⚡ DBZ × Pokémon: Anime Clash 3D 🥋
+# Anime Clash 3D
 
-Un juego de lucha 3D para navegador web, diseñado especialmente para pantallas táctiles de celulares y listo para publicar en **GitHub Pages**.
+Juego de peleas 3D para el navegador, pensado para jugar en el celular y sin instalar nada.
 
----
+**[Jugar ahora](https://nahuelbenitezs.github.io/Anime-Clash-3D/)**
 
-## 🚀 Cómo publicarlo en GitHub Pages (para jugarlo desde el celular)
+> Proyecto de fans, sin fines de lucro y sin relación con los dueños de las marcas. No es un producto oficial. Goku y Vegeta pertenecen a Akira Toriyama, Shueisha y Toei Animation; Pikachu y Charizard, a Nintendo, Game Freak y The Pokémon Company. Si alguno de los titulares pide retirar algo, se retira.
 
-Sigue estos 3 sencillos pasos para que el hermano de tu novia (o cualquiera) pueda jugarlo desde su celular con un link:
+## Cómo jugar
 
-### Paso 1: Crear el repositorio en GitHub
-1. Entra a [github.com](https://github.com) e inicia sesión.
-2. Haz clic en **"New Repository"** (Nuevo repositorio).
-3. Ponle un nombre, por ejemplo: `dbz-pokemon-3d`.
-4. Asegúrate de marcarlo como **Public** (Público) y haz clic en **Create repository**.
+Peleás contra la CPU al mejor de tres rondas, de 60 segundos cada una. Gana la ronda quien deja al rival sin vida o, si se acaba el tiempo, quien conserva más vida en proporción.
 
-### Paso 2: Subir los archivos
-Abre tu terminal en la carpeta del juego (`bri`) y ejecuta:
+| Acción | Teclado | Celular | Qué hace |
+| --- | --- | --- | --- |
+| Moverse | `W` `A` `S` `D` o flechas | Palanca izquierda | Te movés por todo el ring |
+| Golpe | `J` | Puño | Combo de tres golpes; el tercero rompe la guardia y empuja |
+| Ráfaga | `K` | Rayo | Disparo a distancia que gasta ki |
+| Cargar ki | `L` (mantener) | Llama (mantener) | Junta ki, pero te deja quieto |
+| Definitivo | `U` | Estrella | Ataque especial; se puede usar cuando el ki pasa la marca de la barra |
+| Guardia | `I` (mantener) | Escudo (mantener) | Reduce mucho el daño; se rompe con el tercer golpe del combo |
+| Esquivar | `Espacio` | Flechas | Dash con un instante de invulnerabilidad |
+| Pausa | `Esc` | Botón de pausa | También se pausa sola si cambiás de app |
+
+Algunos consejos:
+
+- **Los definitivos se esquivan de costado:** la dirección queda fija cuando empieza la carga.
+- **Dos ráfagas que chocan se anulan.**
+- **Recibir daño da ki,** así que quien va perdiendo suele tener una oportunidad de remontar.
+
+## Luchadores
+
+| Luchador | Vida | Estilo | Definitivo |
+| --- | --- | --- | --- |
+| Goku | 150 | Equilibrado | Kamehameha: rayo largo |
+| Vegeta | 144 | Agresivo, golpea más fuerte | Final Flash: rayo ancho y de carga lenta |
+| Pikachu | 122 | Rápido, cuerpo chico y ki barato | Impactrueno: rayo eléctrico fino y de carga rápida |
+| Charizard | 152 | Pesado, más alcance | Lanzallamas: llamarada corta y ancha |
+
+La CPU tiene tres niveles (fácil, normal y difícil) y juega con las mismas reglas que vos: mismos enfriamientos, mismo ki y mismo daño. Lo que cambia es cuánto tarda en reaccionar y con qué frecuencia esquiva o se cubre.
+
+## Jugarlo en tu compu
+
+No necesita compilación. Hace falta un servidor local porque los modelos no se pueden cargar abriendo el archivo directamente:
+
 ```bash
-git init
-git add .
-git commit -m "Primer lanzamiento de DBZ x Pokémon 3D"
-git branch -M main
-git remote add origin https://github.com/TU_USUARIO/dbz-pokemon-3d.git
-git push -u origin main
+python -m http.server 8000
 ```
-*(Reemplaza `TU_USUARIO` por tu nombre de usuario de GitHub)*
 
-> 💡 **O si prefieres sin consola**: en la página de tu repositorio en GitHub, haz clic en **"uploading an existing file"**, arrastra todos los archivos y carpetas (`index.html`, `css/`, `js/`, etc.) y dale a **Commit changes**.
+Después abrí <http://localhost:8000>.
 
-### Paso 3: Activar GitHub Pages
-1. En tu repositorio en GitHub, ve a la pestaña **Settings** (Configuración).
-2. En el menú de la izquierda, haz clic en **Pages**.
-3. En **Build and deployment > Branch**, selecciona la rama **`main`** y la carpeta **`/(root)`**, y pulsa **Save**.
-4. ¡Listo! En 1 minuto GitHub te dará un link parecido a:
-   👉 **`https://TU_USUARIO.github.io/dbz-pokemon-3d/`**
-5. Abre ese link en el celular (o pásaselo por WhatsApp) ¡y a jugar!
+## Cómo está hecho
 
----
+- **Three.js r128 sin compiladores:** JavaScript directo, servido por GitHub Pages. Three.js y Draco están en `vendor/` para que el juego no dependa de otros servidores.
+- **Un solo sistema de animación:** cada modelo queda fijo en una pose base y [`js/rig.js`](js/rig.js) lo anima por huesos, con poses escritas en los ejes del personaje. Así los cuatro tienen el mismo set de movimientos, aunque cada esqueleto sea distinto.
+- **Lógica separada del dibujo:** toda la pelea corre en `Game.step(dt)`. Por eso la pausa detiene el tiempo de verdad y se pueden simular cientos de peleas en segundos.
+- **Equilibrio medido:** los números de [`js/roster.js`](js/roster.js) se ajustaron simulando peleas de CPU contra CPU entre todos los luchadores.
+- **Pensado para celular:** las partículas usan una sola llamada de dibujo y, si el juego baja de 42 cuadros por segundo, reduce solo la resolución, las sombras y los efectos.
 
-## 🎮 Controles
+### El bug de los brazos estirados
 
-### 📱 En Celular (Pantalla Táctil)
-- **Joystick Virtual (Pulgar Izquierdo):** Moverte por el ring 3D.
-- **👊 Botón GOLPE:** Combo de artes marciales cuerpo a cuerpo.
-- **⚡ Botón BLAST:** Ráfaga de Ki / Bola Eléctrica / Fuego a distancia.
-- **🔥 Botón CARGA (Mantener):** Cargar Ki / Energía con aura brillante.
-- **💥 Botón ULTIMATE:** Ataque definitivo (**Kamehameha**, **Impactrueno**, etc.). Requiere al menos 70% de Ki (el botón brillará cuando esté listo).
-- **💨 Botón DASH:** Esquivar rápidamente con impulso.
-- **⛶ Botón Superior:** Pantalla completa.
-- **🔊 Botón Superior:** Activar/silenciar sonido y música.
+Goku aparecía con los brazos y las piernas deformados. No era la animación: los *morph targets* de su modelo estaban exportados a otra escala, unas 32 veces mayor, y solo se activaban en algunos clips. Se corrigieron dentro del archivo `.glb`. Esa escala también arruinaba el cálculo del tamaño del modelo, que ahora se hace sobre la malla ya deformada por los huesos.
 
-### 💻 En PC (Teclado)
-- **W, A, S, D:** Moverse
-- **J:** Golpe / Combo
-- **K:** Ráfaga de energía
-- **L:** Cargar energía
-- **U:** Ataque Definitivo (Ultimate)
-- **Barra Espaciadora:** Dash / Esquivar
+## Qué se probó y qué no
 
----
+@@TESTS@@
 
-## 🌟 Características
-- **Modelos 3D Auténticos GLB & Animaciones Esqueléticas:** Modelos 3D de alta fidelidad para Goku, Pikachu y Charizard (`assets/*.glb`), con animaciones reales (`03-KAMEHAMEHA`, `02-STANCE`, `Impactrueno`, etc.) y modelo detallado de Vegeta con armadura Saiyan.
-- **Sistema Híbrido con Respaldo Procedural:** Si los archivos 3D tardan en cargar o se juega sin conexión, el motor cuenta con modelos procedurales HD con texturas faciales Canvas para que el juego nunca se congele ni muestre pantallas vacías.
-- **Escenario 3D:** Estadio de artes marciales Tenkaichi con pilares Pokéball y montañas Dragon Ball.
-- **Efectos Visuales (VFX):** Auras de Ki resplandecientes, relámpagos, esferas de energía, ondas expansivas y sacudida de pantalla.
-- **Música y Efectos Web Audio:** Sintetizados en tiempo real sin descargas pesadas de audio ni problemas de copyright.
+## Créditos
+
+- Modelos 3D de Goku, Pikachu y Charizard: obtenidos de terceros, sin autoría registrada en este repositorio.
+- Vegeta, arena, efectos, música y sonidos: generados por código en este proyecto.
+- [Three.js](https://threejs.org), con licencia MIT.
+- Tipografías [Bangers](https://fonts.google.com/specimen/Bangers) y [Rajdhani](https://fonts.google.com/specimen/Rajdhani), desde Google Fonts.

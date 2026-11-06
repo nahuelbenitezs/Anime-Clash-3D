@@ -386,6 +386,16 @@ body:not(.touch-device) #touch-controls { display: none; }
 }
 .util-btn svg { width: 56%; height: 56%; fill: inherit; pointer-events: none; }
 
+/* En plena pelea solo queda la pausa; sonido y pantalla completa vuelven al pausar */
+body.in-battle:not(.is-paused) #btn-sound,
+body.in-battle:not(.is-paused) #btn-fs { display: none; }
+body.in-battle #util-bar {
+    top: calc(max(6px, var(--safe-t)) + clamp(50px, 14vh, 74px));
+    bottom: auto;
+}
+body.in-battle .util-btn { width: 34px; height: 34px; }
+body.is-paused #util-bar { z-index: 110; }
+
 /* ─────────────── Tarjetas ─────────────── */
 #pause-screen, #gameover-screen { background: rgba(20, 16, 12, 0.6); }
 .paper-card {
@@ -430,8 +440,7 @@ body:not(.touch-device) #touch-controls { display: none; }
     .sel-grid { width: min(100%, 700px); }
     .overlay { gap: 6px; }
     .title-legal { font-size: 0.7rem; }
-    #util-bar { bottom: auto; top: calc(max(6px, var(--safe-t)) + 56px); left: 50%; }
-    .util-btn { width: 32px; height: 32px; }
+    .util-btn { width: 36px; height: 36px; }
     .go-body { padding-top: 8px; padding-bottom: 8px; gap: 4px; }
 }
 

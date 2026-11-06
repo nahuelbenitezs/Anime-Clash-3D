@@ -21,6 +21,79 @@ function limbMesh(parent, length, r1, r2, material) {
     return group;
 }
 
+// Solo los rasgos sobre fondo transparente: el color de la piel lo pone la cabeza.
+let _vegetaFace = null;
+function vegetaFaceTexture() {
+    if (_vegetaFace) return _vegetaFace;
+    _vegetaFace = window.canvasTexture(128, 128, (ctx) => {
+        const ink = '#14100c';
+        ctx.lineCap = 'round';
+        [-1, 1].forEach(side => {
+            const x = 64 + side * 25;
+            // Ojo blanco, angosto y severo
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.moveTo(x - side * 15, 57);
+            ctx.lineTo(x + side * 15, 49);
+            ctx.lineTo(x + side * 13, 62);
+            ctx.lineTo(x - side * 12, 65);
+            ctx.closePath();
+            ctx.fill();
+            ctx.strokeStyle = ink;
+            ctx.lineWidth = 2.5;
+            ctx.stroke();
+            ctx.fillStyle = ink;
+            ctx.beginPath();
+            ctx.arc(x - side * 3, 58, 4.2, 0, Math.PI * 2);
+            ctx.fill();
+            // Ceja caída hacia el centro: el ceño fruncido
+            ctx.lineWidth = 6.5;
+            ctx.beginPath();
+            ctx.moveTo(x - side * 19, 50);
+            ctx.lineTo(x + side * 17, 38);
+            ctx.stroke();
+        });
+        ctx.strokeStyle = ink;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(64, 66); ctx.lineTo(61, 80); ctx.lineTo(66, 81);
+        ctx.stroke();
+        ctx.lineWidth = 3.5;
+        ctx.beginPath();
+        ctx.moveTo(50, 98); ctx.lineTo(76, 94);
+        ctx.stroke();
+    });
+    return _vegetaFace;
+}
+
+// Fusiona en una sola malla las piezas de un grupo que comparten material.
+function mergeChildren(group, skip) {
+    const byMaterial = new Map();
+    group.children.slice().forEach(child => {
+        if (!child.isMesh || child === skip) return;
+        if (!byMaterial.has(child.material)) byMaterial.set(child.material, []);
+        byMaterial.get(child.material).push(child);
+    });
+    byMaterial.forEach((meshes, material) => {
+        if (meshes.length < 2) return;
+        const positions = [];
+        const normals = [];
+        meshes.forEach(mesh => {
+            mesh.updateMatrix();
+            const geo = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry.clone();
+            geo.applyMatrix4(mesh.matrix);
+            positions.push(...geo.attributes.position.array);
+            normals.push(...geo.attributes.normal.array);
+            group.remove(mesh);
+            mesh.geometry.dispose();
+        });
+        const merged = new THREE.BufferGeometry();
+        merged.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+        merged.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+        group.add(new THREE.Mesh(merged, material));
+    });
+}
+
 function buildVegetaModel(fighter) {
     const skin = toonMaterial(0xf2c49b);
     const suit = toonMaterial(0x1d3f9c);
@@ -81,12 +154,11 @@ function buildVegetaModel(fighter) {
     head.add(skull);
 
     // Cara: un plano dibujado apoyado sobre la cabeza
-    const faceTex = TextureGenerator.createVegetaFace();
     const face = new THREE.Mesh(
-        new THREE.PlaneGeometry(0.27, 0.27),
-        new THREE.MeshBasicMaterial({ map: faceTex, transparent: true })
+        new THREE.PlaneGeometry(0.25, 0.25),
+        new THREE.MeshBasicMaterial({ map: vegetaFaceTexture(), transparent: true, depthWrite: false })
     );
-    face.position.set(0, 0.11, 0.158);
+    face.position.set(0, 0.115, 0.165);
     head.add(face);
 
     // Pelo en punta, alto y hacia atrás, con entrada en la frente
@@ -166,7 +238,13 @@ function buildVegetaModel(fighter) {
     const legL = makeLeg(1);
     const legR = makeLeg(-1);
 
-    // Contorno negro de cada volumen (la cara no lo lleva)
+    // Une las piezas que se mueven juntas: de unas 40 mallas quedan unas 15, y cada una
+    // menos son dos llamadas de dibujo menos (la malla y su contorno).
+    const groups = [];
+    root.traverse(o => { if (o.isGroup) groups.push(o); });
+    groups.forEach(group => mergeChildren(group, face));
+
+    // Contorno de tinta de cada volumen (la cara no lo lleva)
     const outlineMat = window.makeOutlineMaterial(VEGETA_OUTLINE, false, false);
     const hulls = [];
     root.traverse(o => { if (o.isMesh && o !== face) hulls.push(o); });

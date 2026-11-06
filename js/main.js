@@ -90,6 +90,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const checkOrientation = () => {
         const portrait = window.innerHeight > window.innerWidth * 1.1;
         rotWarn.classList.toggle('hidden', !portrait);
+        // Es un aviso, no un bloqueo: en vertical también se puede jugar
+        clearTimeout(rotWarn._timer);
+        if (portrait) rotWarn._timer = setTimeout(() => rotWarn.classList.add('hidden'), 3500);
     };
     window.addEventListener('resize', checkOrientation);
     window.addEventListener('orientationchange', checkOrientation);

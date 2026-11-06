@@ -1,10 +1,10 @@
 // Retratos reales de cada luchador, generados una vez al cargar a partir de su modelo 3D.
 // Reemplazan a los emoji de la selección, el HUD, la viñeta y la pantalla final.
 const PORTRAIT_FRAME = {
-    goku: { y: 1.55, dist: 2.3, turn: -0.42 },
-    vegeta: { y: 1.72, dist: 2.45, turn: -0.42 },
-    pikachu: { y: 1.0, dist: 1.9, turn: -0.3 },
-    charizard: { y: 2.45, dist: 3.1, turn: -0.35 },
+    goku: { x: 0, y: 1.5, dist: 2.2, turn: 0.45 },
+    vegeta: { x: 0, y: 1.66, dist: 2.2, turn: 0.4 },
+    pikachu: { x: 0, y: 0.95, dist: 2.3, turn: 0.3 },
+    charizard: { x: -0.1, y: 2.3, dist: 4.4, turn: 0.1 },
 };
 
 function makePortraits(types) {
@@ -33,8 +33,8 @@ function makePortraits(types) {
         fighter.updatePose(1);
         scene.updateMatrixWorld(true);
 
-        camera.position.set(0, frame.y + 0.1, frame.dist);
-        camera.lookAt(0, frame.y - 0.1, 0);
+        camera.position.set(frame.x, frame.y + 0.1, frame.dist);
+        camera.lookAt(frame.x, frame.y - 0.1, 0);
         renderer.render(scene, camera);
         portraits[type] = renderer.domElement.toDataURL('image/png');
         scene.remove(fighter.group);

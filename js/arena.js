@@ -177,26 +177,22 @@ class Arena {
         edges.position.y = -0.8;
         this.scene.add(edges);
 
-        // Cuatro postes de piedra con faroles, sin marcas de ninguna franquicia
+        // Postes de piedra con faroles
         const postMat = new THREE.MeshToonMaterial({ color: window.inkColor(0x4a3627), gradientMap: window.toonRamp() });
         const lampMat = new THREE.MeshBasicMaterial({ color: window.inkColor(0xffd98a) });
         const postGeo = new THREE.BoxGeometry(0.7, 3.2, 0.7);
         const capGeo = new THREE.BoxGeometry(1.1, 0.25, 1.1);
         const lampGeo = new THREE.BoxGeometry(0.42, 0.5, 0.42);
         const outline = new THREE.MeshBasicMaterial({ color: window.inkColor(0x14100c), side: THREE.BackSide });
-        [[-12, -7], [12, -7], [-12, 7], [12, 7]].forEach(([x, z]) => {
-            // Los postes delanteros quedan más bajos para no tapar a los luchadores
-            const front = z > 0;
-            const scaleY = front ? 0.3 : 1;
+        // Solo en el fondo: adelante taparían a los luchadores
+        [[-12, -7], [12, -7]].forEach(([x, z]) => {
             const post = new THREE.Mesh(postGeo, postMat);
-            post.scale.y = scaleY;
-            post.position.set(x, 3.2 * scaleY / 2, z);
+            post.position.set(x, 1.6, z);
             post.castShadow = true;
             this.scene.add(post);
             const hull = new THREE.Mesh(postGeo, outline);
             hull.scale.set(1.08, 1.02, 1.08);
             post.add(hull);
-            if (front) return;
             const cap = new THREE.Mesh(capGeo, postMat);
             cap.position.set(x, 3.3, z);
             this.scene.add(cap);
