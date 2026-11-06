@@ -6,15 +6,15 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#000">
-    <title>DBZ × Pokémon — Anime Clash 3D</title>
+    <title>Anime Clash 3D</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Bangers&family=Rajdhani:wght@600;700;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/style.css">
     <!-- Three.js + Loaders -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/SkeletonUtils.js"></script>
+    <script src="vendor/three.min.js"></script>
+    <script src="vendor/GLTFLoader.js"></script>
+    <script src="vendor/DRACOLoader.js"></script>
+    <script src="vendor/SkeletonUtils.js"></script>
 </head>
 <body>
 
@@ -23,18 +23,19 @@
 
 <!-- ═══════════════ LOADING SCREEN ═══════════════ -->
 <div id="loading-screen">
-    <div class="load-logo">DBZ × POKÉMON</div>
-    <div class="load-sub">ANIME CLASH 3D</div>
+    <div class="load-logo">ANIME CLASH 3D</div>
+    <div class="load-sub">JUEGO DE PELEAS</div>
     <div class="load-bar-wrap"><div id="load-bar"></div></div>
     <div id="load-text">Cargando...</div>
 </div>
 
 <!-- ═══════════════ TITLE / MENU SCREEN ═══════════════ -->
 <div id="title-screen" class="overlay hidden">
-    <div class="title-glow">DBZ × POKÉMON</div>
-    <div class="title-sub">ANIME CLASH 3D</div>
+    <div class="title-glow">ANIME CLASH 3D</div>
+    <div class="title-sub">JUEGO DE PELEAS</div>
     <button id="btn-play" class="big-btn pulse">▶ JUGAR</button>
-    <div class="title-hint">Para 1 jugador vs CPU</div>
+    <div class="title-hint">1 jugador contra la CPU</div>
+    <div class="title-legal">Proyecto de fans sin fines de lucro. No es un producto oficial. Los personajes pertenecen a sus dueños.</div>
 </div>
 
 <!-- ═══════════════ SELECTION SCREEN ═══════════════ -->
@@ -139,7 +140,7 @@
 
     <div class="sel-footer">
         <button id="btn-start-fight" class="big-btn">⚡ ¡A LUCHAR!</button>
-        <p class="pc-hint">📱 Celular: Joystick táctil &amp; botones | 💻 PC: WASD + J/K/L/U/Espacio</p>
+        <p class="pc-hint">📱 Celular: Joystick táctil &amp; botones | 💻 PC: WASD + J/K/L/U/I/Espacio</p>
     </div>
 </div>
 
@@ -160,7 +161,7 @@
 
     <!-- Timer + Round -->
     <div class="hud-center">
-        <div id="round-label">ROUND 1</div>
+        <div id="round-label">RONDA 1</div>
         <div id="battle-timer">60</div>
     </div>
 
@@ -199,6 +200,9 @@
         <button id="btn-dash" class="action-btn btn-dash" data-action="dash">
             <span class="btn-icon">💨</span><span class="btn-lbl">DASH</span>
         </button>
+        <button id="btn-guard" class="action-btn btn-guard" data-action="guard">
+            <span class="btn-icon">🛡️</span><span class="btn-lbl">GUARDIA</span>
+        </button>
         <button id="btn-charge" class="action-btn btn-charge" data-action="charge">
             <span class="btn-icon">🔥</span><span class="btn-lbl">CARGA</span>
         </button>
@@ -235,14 +239,16 @@
 </div>
 
 <!-- ═══════════════ ORIENTATION ═══════════════ -->
-<div id="rotate-warn" class="hidden">🔄 Gira el celular para una mejor experiencia</div>
+<div id="rotate-warn" class="hidden">🔄 Girá el celular para jugar mejor</div>
 
 <!-- ═══════════════ SCRIPTS ═══════════════ -->
 <script src="js/audio.js"></script>
 <script src="js/vfx.js"></script>
 <script src="js/arena.js"></script>
 <script src="js/model_loader.js"></script>
+<script src="js/roster.js"></script>
 <script src="js/characters.js"></script>
+<script src="js/ai.js"></script>
 <script src="js/controls.js"></script>
 <script src="js/game.js"></script>
 <script src="js/main.js"></script>

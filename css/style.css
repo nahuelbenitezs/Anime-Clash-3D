@@ -562,6 +562,11 @@ html, body {
     background: linear-gradient(135deg, #9b59b6, #4a00e0);
     bottom: 84px; right: 8px;
 }
+.btn-guard {
+    width: 52px; height: 52px;
+    background: linear-gradient(135deg, #5f7a8c, #2c3e50);
+    bottom: 125px; right: 118px;
+}
 .btn-ultimate {
     width: 68px; height: 68px;
     background: linear-gradient(135deg, #ffd700, #ff4400);
@@ -750,6 +755,7 @@ html, body {
     .btn-charge { width: 48px; height: 48px; bottom: 6px; right: 5px; }
     .btn-dash   { width: 44px; height: 44px; bottom: 66px; right: 6px; }
     .btn-ultimate { width: 56px; height: 56px; bottom: 38px; right: 125px; }
+    .btn-guard  { width: 44px; height: 44px; bottom: 90px; right: 104px; }
     .sel-columns { flex-direction: row; gap: 8px; }
     .tile-stats, .tile-sig { display: none; }
     #announcer { font-size: 2.5rem; }
@@ -759,4 +765,13 @@ html, body {
 @media (max-width: 340px) {
     #joystick-zone { width: 100px; height: 100px; }
     .btn-attack { width: 52px; height: 52px; }
+}
+
+.title-legal {
+    margin-top: 18px;
+    max-width: 34em;
+    padding: 0 16px;
+    text-align: center;
+    font-size: 0.75rem;
+    color: rgba(255,255,255,0.75);
 }

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════
-// MAIN ENTRY POINT  —  DBZ × Pokémon: Anime Clash 3D
+// MAIN ENTRY POINT — Anime Clash 3D
 // ═══════════════════════════════════════════════════
 
 window.soundManager = new SoundManager();
@@ -14,29 +14,14 @@ let selectedEnemy  = 'pikachu';
 function runLoadingScreen(onComplete) {
     const bar  = document.getElementById('load-bar');
     const text = document.getElementById('load-text');
-    const msgs = ['Iniciando motor 3D...', 'Cargando arena...', 'Preparando personajes...', 'Listo!'];
-    let progress = 0;
-    let msgIdx = 0;
-
-    const tick = () => {
-        progress += Math.random() * 18 + 6;
-        if (progress > 100) progress = 100;
-
-        bar.style.width = progress + '%';
-        if (msgIdx < msgs.length - 1 && progress > (msgIdx + 1) * 25) {
-            msgIdx++;
-            text.textContent = msgs[msgIdx];
-        }
-
-        if (progress < 100) {
-            setTimeout(tick, 80 + Math.random() * 100);
-        } else {
-            text.textContent = '¡Listo!';
-            setTimeout(onComplete, 400);
-        }
-    };
-
-    setTimeout(tick, 300);
+    text.textContent = 'Cargando luchadores...';
+    window.modelLoader.preload(['goku', 'pikachu', 'charizard'], (progress) => {
+        bar.style.width = Math.round(progress * 100) + '%';
+    }).then(() => {
+        bar.style.width = '100%';
+        text.textContent = '¡Listo!';
+        setTimeout(onComplete, 250);
+    });
 }
 
 // ─────────────────────────────────────────────────
@@ -74,13 +59,6 @@ document.addEventListener('DOMContentLoaded', () => {
     setupRoster('roster-p2', 'p2', (char) => { selectedEnemy  = char; });
 
     document.getElementById('btn-start-fight').addEventListener('click', () => {
-        if (selectedPlayer === selectedEnemy) {
-            // Allow mirror match — just a brief flash
-            document.getElementById('btn-start-fight').textContent = '⚡ ¡BATALLA DE CLONES!';
-            setTimeout(() => {
-                document.getElementById('btn-start-fight').textContent = '⚡ ¡A LUCHAR!';
-            }, 800);
-        }
         game.startMatch(selectedPlayer, selectedEnemy);
     });
 
@@ -115,7 +93,6 @@ function setupRoster(rosterId, side, onChange) {
 
     roster.querySelectorAll('.char-tile').forEach(tile => {
         tile.addEventListener('click', () => {
-            // Can't pick same fighter for both sides
             const char = tile.dataset.char;
             roster.querySelectorAll('.char-tile').forEach(t => t.classList.remove('selected'));
             tile.classList.add('selected');

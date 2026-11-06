@@ -8,6 +8,8 @@ class SoundManager {
         this.chargeOsc = null;
         this.chargeGain = null;
         this.chargeModOsc = null;
+        this.chargers = new Set(); // quién está cargando ki: el sonido es compartido
+        this.chargeStopTimer = null;
     }
 
     init() {
@@ -27,8 +29,6 @@ class SoundManager {
         if (this.isMuted) {
             this.stopMusic();
             this.stopKiCharge();
-        } else {
-            this.startMusic();
         }
         return this.isMuted;
     }
@@ -135,8 +135,18 @@ class SoundManager {
     }
 
     // Ki charging continuous drone
-    startKiCharge() {
-        if (this.isMuted || !this.ctx || this.chargeOsc) return;
+    startKiCharge(owner = 'default') {
+        this.chargers.add(owner);
+        if (this.isMuted || !this.ctx) return;
+        // Volvió a cargar mientras el sonido anterior se apagaba: lo retoma
+        if (this.chargeStopTimer) {
+            clearTimeout(this.chargeStopTimer);
+            this.chargeStopTimer = null;
+            this.chargeGain.gain.cancelScheduledValues(this.ctx.currentTime);
+            this.chargeGain.gain.linearRampToValueAtTime(0.28, this.ctx.currentTime + 0.1);
+            return;
+        }
+        if (this.chargeOsc) return;
         const now = this.ctx.currentTime;
 
         this.chargeOsc = this.ctx.createOscillator();
@@ -165,11 +175,17 @@ class SoundManager {
         this.chargeModOsc = modOsc;
     }
 
-    stopKiCharge() {
+    // Sin dueño corta el sonido para todos (pausa, silencio, salir de la pelea)
+    stopKiCharge(owner) {
+        if (owner === undefined) this.chargers.clear();
+        else this.chargers.delete(owner);
+        if (this.chargers.size > 0 || this.chargeStopTimer) return;
+
         if (this.chargeGain && this.ctx) {
             const now = this.ctx.currentTime;
             this.chargeGain.gain.linearRampToValueAtTime(0.01, now + 0.15);
-            setTimeout(() => {
+            this.chargeStopTimer = setTimeout(() => {
+                this.chargeStopTimer = null;
                 if (this.chargeOsc) {
                     try {
                         this.chargeOsc.stop();

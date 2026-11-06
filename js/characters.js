@@ -411,25 +411,26 @@ class TextureGenerator {
 
 // Stylized 3D Fighter Entity
 class Fighter {
-    constructor(type, isPlayer = false, scene, vfx) {
+    constructor(type, isPlayer = false, scene, vfx, events = {}) {
         this.type = type; // 'goku', 'pikachu', 'vegeta', 'charizard'
+        this.stats = FIGHTER_STATS[type];
         this.isPlayer = isPlayer;
         this.scene = scene;
         this.vfx = vfx;
+        this.events = events;
 
         // Combat Stats
-        this.maxHealth = 100;
-        this.health = 100;
+        this.maxHealth = this.stats.hp;
+        this.health = this.stats.hp;
         this.maxKi = 100;
-        this.ki = 40;
-        this.ultimateCost = 70;
+        this.ki = 30;
+        this.ultimateCost = this.stats.ult.cost;
         this.isDead = false;
 
         // Movement & Physics
         this.position = new THREE.Vector3(isPlayer ? -4.5 : 4.5, 0, 0);
         this.velocity = new THREE.Vector3();
-        this.speed = (type === 'pikachu') ? 7.8 : 6.6;
-        this.facing = isPlayer ? 1 : -1;
+        this.speed = this.stats.speed;
         this.rotationY = isPlayer ? Math.PI / 2 : -Math.PI / 2;
         this.targetRotationY = this.rotationY;
 
@@ -437,22 +438,35 @@ class Fighter {
         this.state = 'idle';
         this.stateTimer = 0;
         this.comboStep = 0;
-        this.isInvincible = false;
-        this.invincibleTimer = 0;
+        this.comboWindow = 0;
+        this.invuln = 0;
+        this.dashInvuln = 0;
+        this.attackCd = 0;
+        this.blastCd = 0;
+        this.dashCd = 0;
+        this.hurtDuration = 0.28;
+        this.pendingHit = null;
+        this.pendingUlt = null;
+        this.ultEnd = 0;
+        this.dashDir = new THREE.Vector3();
+        this.isCharging = false;
+        this.wasMoving = false;
 
         // Model container
         this.group = new THREE.Group();
         this.group.position.copy(this.position);
+        this.group.rotation.y = this.rotationY;
         this.scene.add(this.group);
 
         this.joints = {};
         this.buildModel();
 
-        this.auraColor = this.getAuraColor();
+        this.auraColor = this.stats.aura;
 
         // 3D GLB Model Asset Integration
         this.hasGLB = false;
         this.glbModel = null;
+        this.glbHolder = null;
         this.mixer = null;
         this.actions = {};
         this.currentAction = null;
@@ -464,7 +478,7 @@ class Fighter {
         const validModels = ['goku', 'pikachu', 'charizard'];
         if (!validModels.includes(this.type)) return;
 
-        window.modelLoader.loadModel(this.type, `assets/${this.type}.glb`, (data) => {
+        window.modelLoader.loadModel(this.type, `assets/${this.type}.glb?v=${ASSET_VERSION}`, (data) => {
             if (!data || !data.scene || this.isDead) return;
             this.onGLBModelLoaded(data);
         });
@@ -477,28 +491,22 @@ class Fighter {
         }
 
         const model = data.scene;
-        // Compute bounding box to normalize scale and center
-        const box = new THREE.Box3().setFromObject(model);
+
+        // Escala y apoyo en el piso a partir de la malla ya deformada por los huesos:
+        // el bounding box común mira la geometría cruda y en estos modelos da otra escala.
+        const box = window.modelLoader.skinnedBox(model);
         const size = box.getSize(new THREE.Vector3());
-
-        let targetHeight = 2.2;
-        if (this.type === 'pikachu') targetHeight = 1.35;
-        else if (this.type === 'charizard') targetHeight = 2.6;
-
-        const scale = targetHeight / (size.y || 1);
+        const scale = this.stats.height / (size.y || 1);
         model.scale.setScalar(scale);
+        model.position.set(
+            -(box.min.x + box.max.x) / 2 * scale,
+            -box.min.y * scale,
+            -(box.min.z + box.max.z) / 2 * scale
+        );
 
-        // Stand model on floor (y = 0) and center horizontally
-        const scaledBox = new THREE.Box3().setFromObject(model);
-        model.position.y -= scaledBox.min.y;
-        model.position.x -= (scaledBox.min.x + scaledBox.max.x) / 2;
-        model.position.z -= (scaledBox.min.z + scaledBox.max.z) / 2;
-
-        if (this.type === 'goku') {
-            model.rotation.y = Math.PI; // Face forward
-        }
-
-        this.group.add(model);
+        this.glbHolder = new THREE.Group();
+        this.glbHolder.add(model);
+        this.group.add(this.glbHolder);
         this.hasGLB = true;
         this.glbModel = model;
 
@@ -510,15 +518,7 @@ class Fighter {
             });
 
             if (this.type === 'goku') {
-                if (this.actions['02-STANCE']) {
-                    this.playGLBAction('02-STANCE', true);
-                } else if (this.actions['00-IDLE']) {
-                    this.playGLBAction('00-IDLE', true);
-                }
-            } else if (this.type === 'pikachu') {
-                if (this.actions['Impactrueno']) {
-                    this.playGLBAction('Impactrueno', false);
-                }
+                this.playGLBAction('02-STANCE', true);
             }
         }
     }
@@ -543,21 +543,8 @@ class Fighter {
         this.currentAction = next;
     }
 
-    getAuraColor() {
-        switch (this.type) {
-            case 'goku': return 0xffd700; // Super Saiyan Golden Aura
-            case 'pikachu': return 0x00f2ff; // Electric Cyan / Lightning
-            case 'vegeta': return 0x2266ff; // Royal Blue Saiyan Aura
-            case 'charizard': return 0xff4500; // Fiery Crimson Orange
-            default: return 0xffffff;
-        }
-    }
-
-    mat(color, roughness = 0.35) {
-        return new THREE.MeshToonMaterial({
-            color: color,
-            roughness: roughness
-        });
+    mat(color) {
+        return new THREE.MeshToonMaterial({ color: color });
     }
 
     buildModel() {
@@ -1174,147 +1161,318 @@ class Fighter {
     // =========================================================================
     // ACTIONS & ANIMATIONS
     // =========================================================================
+    // ─────────────────────────────────────────────
+    //  ESTADOS
+    // ─────────────────────────────────────────────
     setAnimation(state) {
-        if (this.state === 'ko' || this.isDead) return;
+        if (this.isDead && state !== 'ko') return;
+        if (this.state === 'ko') return;
         if (this.state === state) return;
+
+        if (this.state === 'charge') this.setChargingSound(false);
 
         this.state = state;
         this.stateTimer = 0;
 
-        if (this.hasGLB) {
-            if (this.type === 'goku') {
-                if (state === 'ultimate') this.playGLBAction('03-KAMEHAMEHA', false, 0.1);
-                else if (state === 'attack') this.playGLBAction('01-OSSU', false, 0.1);
-                else if (state === 'idle' || state === 'run') this.playGLBAction('02-STANCE', true, 0.2);
-            } else if (this.type === 'pikachu') {
-                if (state === 'ultimate' || state === 'blast') this.playGLBAction('Impactrueno', false, 0.1);
-            } else if (this.type === 'charizard') {
-                if (state === 'hurt' || state === 'ko') this.playGLBAction('Chariard_dizzy', true, 0.2);
-            }
+        if (this.hasGLB && this.type === 'goku') {
+            if (state === 'ultimate') this.playGLBAction('03-KAMEHAMEHA', false, 0.1);
+            else if (state === 'idle' || state === 'run') this.playGLBAction('02-STANCE', true, 0.2);
         }
+    }
+
+    setChargingSound(on) {
+        if (this.isCharging === on) return;
+        this.isCharging = on;
+        if (on) window.soundManager.startKiCharge(this);
+        else window.soundManager.stopKiCharge(this);
+    }
+
+    canAct() {
+        return !this.isDead && !['ko', 'hurt', 'ultimate', 'dash'].includes(this.state);
+    }
+
+    // ─────────────────────────────────────────────
+    //  ACCIONES (las usan el jugador y la CPU por igual)
+    // ─────────────────────────────────────────────
+    move(mx, mz, dt) {
+        const len = Math.hypot(mx, mz);
+        const moving = len > 0.06;
+        const mult = { idle: 1, run: 1, attack: 0.3, blast: 0.5, guard: 0.3 }[this.state] || 0;
+
+        if (moving && mult > 0) {
+            const k = Math.min(len, 1) / len;
+            this.position.x += mx * k * this.speed * mult * dt;
+            this.position.z += mz * k * this.speed * mult * dt;
+        }
+        if (moving && this.state === 'idle') this.setAnimation('run');
+        else if (!moving && this.state === 'run') this.setAnimation('idle');
     }
 
     attack(target) {
-        if (this.state === 'ko' || this.state === 'hurt' || this.state === 'ultimate') return;
+        if (!this.canAct() || this.attackCd > 0) return false;
         this.setAnimation('attack');
-        this.comboStep = (this.comboStep + 1) % 3;
+        this.stateTimer = 0;
 
-        window.soundManager.playPunch(this.comboStep === 2);
+        if (this.comboWindow <= 0) this.comboStep = 0;
+        const step = this.comboStep;
+        this.comboStep = (step + 1) % 3;
+        this.comboWindow = 0.7;
+        this.attackCd = step === 2 ? 0.55 : 0.3;
+        this.pendingHit = { t: 0.1, step, target };
 
-        const dist = this.position.distanceTo(target.position);
-        if (dist < 2.5) {
-            const damage = 8 + this.comboStep * 4;
-            const isHeavy = this.comboStep === 2;
-            target.takeDamage(damage, this, isHeavy);
-            this.vfx.createHitSparks(target.position.clone().add(new THREE.Vector3(0, 1.2, 0)), this.auraColor, isHeavy ? 24 : 14);
-            this.vfx.shake(isHeavy ? 0.4 : 0.15);
-            this.ki = Math.min(this.maxKi, this.ki + 8);
+        // Pequeño avance hacia el rival para que el golpe se sienta con peso
+        const dx = target.position.x - this.position.x;
+        const dz = target.position.z - this.position.z;
+        const d = Math.hypot(dx, dz) || 1;
+        if (d > this.stats.reach * 0.55) {
+            this.velocity.x += (dx / d) * 5;
+            this.velocity.z += (dz / d) * 5;
         }
+        return true;
+    }
+
+    resolveHit({ step, target }) {
+        const dist = this.position.distanceTo(target.position);
+        window.soundManager.playPunch(step === 2);
+        if (dist > this.stats.reach || target.isDead) return;
+
+        const heavy = step === 2;
+        const damage = [7, 9, 14][step] * this.stats.power;
+        const dealt = target.receiveHit({ amount: damage, attacker: this, heavy, kind: 'melee' });
+        if (dealt <= 0) return;
+
+        const spark = target.position.clone();
+        spark.y += target.stats.muzzleY;
+        this.vfx.createHitSparks(spark, this.auraColor, heavy ? 22 : 12);
+        this.vfx.shake(heavy ? 0.4 : 0.15);
+        this.ki = Math.min(this.maxKi, this.ki + 7);
+        if (this.events.onHit) this.events.onHit(this, target, dealt, { heavy, kind: 'melee' });
     }
 
     shootBlast(target) {
-        if (this.state === 'ko' || this.state === 'hurt' || this.state === 'ultimate') return;
-        if (this.ki < 15) return false;
+        const b = this.stats.blast;
+        if (!this.canAct() || this.blastCd > 0 || this.ki < b.cost) return false;
 
-        this.ki -= 15;
+        this.ki -= b.cost;
+        this.blastCd = b.cooldown;
         this.setAnimation('blast');
+        this.stateTimer = 0;
         window.soundManager.playBlast();
 
-        const spawnPos = this.position.clone().add(new THREE.Vector3(this.facing * 0.8, 1.3, 0));
-        const dir = new THREE.Vector3(this.facing, 0, 0);
-
+        const dir = this.aimAt(target);
+        const spawnPos = this.position.clone().addScaledVector(dir, 0.8);
+        spawnPos.y = this.stats.muzzleY;
         this.vfx.spawnProjectile(this, spawnPos, dir, {
-            color: this.auraColor,
-            damage: 16,
-            speed: 16
+            color: this.auraColor, damage: b.damage, speed: b.speed, size: b.size,
         });
         return true;
     }
 
     chargeKi(charging) {
-        if (this.state === 'ko' || this.state === 'hurt' || this.state === 'ultimate') return;
-
         if (charging) {
+            if (!this.canAct() || this.ki >= this.maxKi) {
+                if (this.state === 'charge') this.setAnimation('idle');
+                return;
+            }
             if (this.state !== 'charge') {
                 this.setAnimation('charge');
-                window.soundManager.startKiCharge();
+                this.setChargingSound(true);
             }
-        } else {
-            if (this.state === 'charge') {
-                this.setAnimation('idle');
-                window.soundManager.stopKiCharge();
-            }
+        } else if (this.state === 'charge') {
+            this.setAnimation('idle');
         }
     }
 
-    triggerUltimate(target) {
-        if (this.state === 'ko' || this.state === 'hurt') return false;
-        if (this.ki < this.ultimateCost) return false;
+    guard(on) {
+        if (on) {
+            if (this.canAct() && this.state !== 'guard' && this.state !== 'attack') this.setAnimation('guard');
+        } else if (this.state === 'guard') {
+            this.setAnimation('idle');
+        }
+    }
 
-        this.ki -= this.ultimateCost;
-        this.setAnimation('ultimate');
-        window.soundManager.playUltimateBeam();
+    dash(mx, mz, opponent) {
+        if (!this.canAct() || this.dashCd > 0) return false;
+        let len = Math.hypot(mx, mz);
+        if (len < 0.1 && opponent) {
+            // Sin dirección: salto hacia atrás
+            mx = this.position.x - opponent.position.x;
+            mz = this.position.z - opponent.position.z;
+            len = Math.hypot(mx, mz);
+        }
+        if (len < 0.001) { mx = this.isPlayer ? -1 : 1; mz = 0; len = 1; }
 
-        const spawnPos = this.position.clone().add(new THREE.Vector3(this.facing * 0.8, 1.3, 0));
-        const dir = new THREE.Vector3(this.facing, 0, 0);
-
-        setTimeout(() => {
-            if (this.isDead) return;
-            this.vfx.spawnBeam(this, spawnPos, dir, {
-                color: this.auraColor,
-                damage: 48,
-                length: 24,
-                duration: 1.6
-            });
-            window.soundManager.playExplosion();
-        }, 500);
-
+        this.dashDir.set(mx / len, 0, mz / len);
+        this.dashCd = 0.85;
+        this.dashInvuln = 0.2;
+        this.setAnimation('dash');
+        window.soundManager.playDash();
+        this.vfx.emitAura(this.position, this.auraColor, 4);
         return true;
     }
 
-    takeDamage(amount, attacker, isHeavy = false) {
-        if (this.isDead || this.isInvincible) return;
+    triggerUltimate(target) {
+        const u = this.stats.ult;
+        if (!this.canAct() || this.ki < u.cost) return false;
+
+        this.ki -= u.cost;
+        this.setAnimation('ultimate');
+        this.pendingHit = null;
+        // La dirección queda fija al empezar: por eso se puede esquivar de costado.
+        this.pendingUlt = { t: u.windup, dir: this.aimAt(target) };
+        this.ultEnd = u.windup + u.duration + 0.15;
+        this.targetRotationY = Math.atan2(this.pendingUlt.dir.x, this.pendingUlt.dir.z);
+        window.soundManager.playUltimateBeam();
+        if (this.events.onUltimate) this.events.onUltimate(this);
+        return true;
+    }
+
+    aimAt(target) {
+        const dir = new THREE.Vector3(
+            target.position.x - this.position.x, 0, target.position.z - this.position.z
+        );
+        if (dir.lengthSq() < 0.0001) dir.set(this.isPlayer ? 1 : -1, 0, 0);
+        return dir.normalize();
+    }
+
+    // ─────────────────────────────────────────────
+    //  RECIBIR DAÑO
+    // ─────────────────────────────────────────────
+    // Devuelve el daño aplicado (0 si esquivó). `continuous` son los rayos, que
+    // pegan por tick y no generan aturdimiento ni invulnerabilidad.
+    receiveHit({ amount, attacker, heavy = false, kind = 'melee', continuous = false }) {
+        if (this.isDead || this.dashInvuln > 0) return 0;
+        if (this.invuln > 0 && !continuous) return 0;
+
+        const pushDir = this.position.clone().sub(attacker.position);
+        pushDir.y = 0;
+        if (pushDir.lengthSq() < 0.0001) pushDir.set(this.isPlayer ? -1 : 1, 0, 0);
+        pushDir.normalize();
+
+        if (this.state === 'guard') {
+            const guardBroken = heavy && kind === 'melee';
+            if (!guardBroken) {
+                const dealt = amount * (continuous ? 0.35 : 0.25);
+                this.health = Math.max(0, this.health - dealt);
+                this.ki = Math.min(this.maxKi, this.ki + (continuous ? 0.2 : 3));
+                if (!continuous) this.velocity.addScaledVector(pushDir, 4);
+                if (this.events.onBlock && !continuous) this.events.onBlock(this);
+                if (this.health <= 0) this.die();
+                return dealt;
+            }
+            // El golpe final del combo rompe la guardia
+            this.setAnimation('idle');
+        }
 
         this.health = Math.max(0, this.health - amount);
-        this.setAnimation('hurt');
-        this.isInvincible = true;
-        this.invincibleTimer = 0.35;
+        this.ki = Math.min(this.maxKi, this.ki + amount * 0.3);
 
-        const pushDir = Math.sign(this.position.x - attacker.position.x) || (this.facing * -1);
-        this.position.x += pushDir * (isHeavy ? 1.4 : 0.6);
-        this.position.x = THREE.MathUtils.clamp(this.position.x, -11, 11);
-
-        if (this.health <= 0) {
-            this.die();
+        if (!continuous && this.state !== 'ultimate') {
+            this.pendingHit = null;
+            this.setAnimation('hurt');
+            this.stateTimer = 0;
+            this.hurtDuration = heavy ? 0.5 : 0.26;
+            this.velocity.addScaledVector(pushDir, heavy ? 15 : 4);
+            // Tras el golpe final hay un respiro para que no existan combos infinitos
+            this.invuln = heavy ? 0.7 : 0;
+        } else if (continuous) {
+            this.velocity.addScaledVector(pushDir, 0.35);
         }
+
+        if (this.health <= 0) this.die();
+        return amount;
     }
 
     die() {
         this.isDead = true;
+        this.invuln = 0;
+        this.group.visible = true;
+        this.pendingHit = null;
+        this.pendingUlt = null;
+        this.setChargingSound(false);
         this.setAnimation('ko');
-        window.soundManager.stopKiCharge();
         window.soundManager.playExplosion();
+        if (this.events.onKO) this.events.onKO(this);
     }
 
+    dispose() {
+        this.setChargingSound(false);
+        this.scene.remove(this.group);
+    }
+
+    // ─────────────────────────────────────────────
+    //  UPDATE
+    // ─────────────────────────────────────────────
     update(dt, opponent) {
         this.stateTimer += dt;
+        this.attackCd = Math.max(0, this.attackCd - dt);
+        this.blastCd = Math.max(0, this.blastCd - dt);
+        this.dashCd = Math.max(0, this.dashCd - dt);
+        this.comboWindow = Math.max(0, this.comboWindow - dt);
+        this.dashInvuln = Math.max(0, this.dashInvuln - dt);
+        if (!this.isDead) this.ki = Math.min(this.maxKi, this.ki + 2 * dt);
 
-        if (opponent && this.state !== 'ko') {
-            const dx = opponent.position.x - this.position.x;
-            if (Math.abs(dx) > 0.4) {
-                this.facing = dx > 0 ? 1 : -1;
-                this.targetRotationY = this.facing > 0 ? Math.PI / 2 : -Math.PI / 2;
+        // Golpe en su cuadro activo
+        if (this.pendingHit) {
+            this.pendingHit.t -= dt;
+            if (this.pendingHit.t <= 0) {
+                const hit = this.pendingHit;
+                this.pendingHit = null;
+                this.resolveHit(hit);
             }
         }
-        this.rotationY = THREE.MathUtils.lerp(this.rotationY, this.targetRotationY, dt * 14);
+
+        // Disparo del definitivo tras la carga
+        if (this.pendingUlt) {
+            this.pendingUlt.t -= dt;
+            if (this.state === 'ultimate') this.vfx.emitAura(this.position, this.stats.ult.color, 2);
+            if (this.pendingUlt.t <= 0) {
+                const u = this.stats.ult;
+                const dir = this.pendingUlt.dir;
+                const start = this.position.clone().addScaledVector(dir, 0.8);
+                start.y = this.stats.muzzleY;
+                this.pendingUlt = null;
+                this.vfx.spawnBeam(this, start, dir, {
+                    color: u.color, damage: u.damage, length: u.length, duration: u.duration, radius: u.radius,
+                });
+                window.soundManager.playExplosion();
+            }
+        }
+
+        // Mirar al rival en todo el plano, no solo izquierda o derecha
+        if (opponent && !this.isDead && this.state !== 'ultimate' && this.state !== 'dash') {
+            const dx = opponent.position.x - this.position.x;
+            const dz = opponent.position.z - this.position.z;
+            if (Math.hypot(dx, dz) > 0.3) this.targetRotationY = Math.atan2(dx, dz);
+        }
+        let delta = this.targetRotationY - this.rotationY;
+        delta = Math.atan2(Math.sin(delta), Math.cos(delta));
+        this.rotationY += delta * Math.min(1, dt * 14);
         this.group.rotation.y = this.rotationY;
 
-        if (this.isInvincible) {
-            this.invincibleTimer -= dt;
-            this.group.visible = Math.floor(this.invincibleTimer * 25) % 2 === 0;
-            if (this.invincibleTimer <= 0) {
-                this.isInvincible = false;
-                this.group.visible = true;
+        // Parpadeo durante el respiro posterior a un golpe fuerte
+        if (this.invuln > 0) {
+            this.invuln -= dt;
+            this.group.visible = this.invuln <= 0 || Math.floor(this.invuln * 25) % 2 === 0;
+        }
+
+        // Dash e inercia
+        if (this.state === 'dash') {
+            this.position.addScaledVector(this.dashDir, this.speed * 3 * dt);
+            if (Math.random() < 0.5) this.vfx.emitAura(this.position, this.auraColor, 1);
+        }
+        this.position.addScaledVector(this.velocity, dt);
+        this.velocity.multiplyScalar(Math.pow(0.0015, dt));
+
+        // No atravesar al rival
+        if (opponent && !opponent.isDead && !this.isDead) {
+            const dx = this.position.x - opponent.position.x;
+            const dz = this.position.z - opponent.position.z;
+            const d = Math.hypot(dx, dz);
+            const minD = 1.0;
+            if (d < minD && d > 0.0001) {
+                this.position.x += (dx / d) * (minD - d) * 0.5;
+                this.position.z += (dz / d) * (minD - d) * 0.5;
             }
         }
 
@@ -1323,8 +1481,9 @@ class Fighter {
         this.group.position.copy(this.position);
 
         if (this.state === 'charge') {
-            this.ki = Math.min(this.maxKi, this.ki + 35 * dt);
-            this.vfx.emitAura(this.position, this.auraColor, 3);
+            this.ki = Math.min(this.maxKi, this.ki + this.stats.kiCharge * dt);
+            if (this.ki >= this.maxKi) this.setAnimation('idle');
+            this.vfx.emitAura(this.position, this.auraColor, 2);
             if (this.type === 'pikachu' && Math.random() < 0.35) {
                 const sparkP = this.position.clone().add(new THREE.Vector3((Math.random()-0.5)*1.5, 0.8, (Math.random()-0.5)*1.5));
                 this.vfx.emitLightning(this.position.clone().add(new THREE.Vector3(0, 0.5, 0)), sparkP, 0x00f2ff);
@@ -1338,21 +1497,18 @@ class Fighter {
             this.outerFlameMesh.rotation.y += dt * 8;
         }
 
-        if (this.state === 'attack' && this.stateTimer > 0.28) {
-            this.setAnimation('idle');
-        } else if (this.state === 'blast' && this.stateTimer > 0.38) {
-            this.setAnimation('idle');
-        } else if (this.state === 'ultimate' && this.stateTimer > 2.0) {
-            this.setAnimation('idle');
-        } else if (this.state === 'hurt' && this.stateTimer > 0.35) {
-            this.setAnimation('idle');
-        }
+        const t = this.stateTimer;
+        if (this.state === 'attack' && t > 0.26) this.setAnimation('idle');
+        else if (this.state === 'blast' && t > 0.3) this.setAnimation('idle');
+        else if (this.state === 'ultimate' && t > this.ultEnd) this.setAnimation('idle');
+        else if (this.state === 'hurt' && t > this.hurtDuration) this.setAnimation('idle');
+        else if (this.state === 'dash' && t > 0.22) this.setAnimation('idle');
 
-        if (this.mixer) {
-            this.mixer.update(dt);
-        }
+        if (this.mixer) this.mixer.update(dt);
 
-        if (!this.hasGLB) {
+        if (this.hasGLB) {
+            if (this.isDead) this.glbHolder.rotation.x += (-Math.PI / 2 - this.glbHolder.rotation.x) * Math.min(1, dt * 8);
+        } else {
             this.applyProceduralAnimation(dt);
         }
     }

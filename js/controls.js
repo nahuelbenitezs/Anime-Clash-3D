@@ -7,8 +7,11 @@ class InputManager {
             blast: false,
             charge: false,
             dash: false,
-            ultimate: false
+            ultimate: false,
+            guard: false
         };
+        // Un toque rápido entre dos cuadros no se puede perder: queda anotado hasta leerlo
+        this.latched = {};
 
         this.keys = {};
         this.joystickTouchId = null;
@@ -20,8 +23,22 @@ class InputManager {
     }
 
     setupKeyboard() {
+        const gameKeys = new Set([' ', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright']);
+        const keyAction = {
+            j: 'attack', z: 'attack', k: 'blast', x: 'blast', l: 'charge', c: 'charge',
+            u: 'ultimate', v: 'ultimate', i: 'guard', b: 'guard', ' ': 'dash', shift: 'dash',
+        };
         window.addEventListener('keydown', (e) => {
-            this.keys[e.key.toLowerCase()] = true;
+            const key = e.key.toLowerCase();
+            if (gameKeys.has(key)) e.preventDefault();
+            if (!e.repeat && keyAction[key]) this.latched[keyAction[key]] = true;
+            this.keys[key] = true;
+            this.updateKeyboardInput();
+        });
+
+        // Si la ventana pierde el foco, el keyup nunca llega y las teclas quedarían trabadas
+        window.addEventListener('blur', () => {
+            this.keys = {};
             this.updateKeyboardInput();
         });
 
@@ -56,6 +73,15 @@ class InputManager {
         this.actions.charge = !!(this.keys['l'] || this.keys['c']);
         this.actions.dash = !!(this.keys[' '] || this.keys['shift']);
         this.actions.ultimate = !!(this.keys['u'] || this.keys['v']);
+        this.actions.guard = !!(this.keys['i'] || this.keys['b']);
+    }
+
+    wants(action) {
+        return this.actions[action] || !!this.latched[action];
+    }
+
+    endFrame() {
+        this.latched = {};
     }
 
     setupTouchControls() {
@@ -116,6 +142,7 @@ class InputManager {
         this.bindActionButton('btn-charge', 'charge', true); // continuous charge
         this.bindActionButton('btn-ultimate', 'ultimate');
         this.bindActionButton('btn-dash', 'dash');
+        this.bindActionButton('btn-guard', 'guard', true);
     }
 
     updateJoystick(clientX, clientY, knobElement) {
@@ -147,20 +174,14 @@ class InputManager {
             if (e.cancelable) e.preventDefault();
             btn.classList.add('active');
             this.actions[actionName] = true;
-            if (navigator.vibrate) {
-                try { navigator.vibrate(20); } catch(err){}
-            }
+            this.latched[actionName] = true;
+            if (navigator.vibrate) navigator.vibrate(20);
         };
 
         const release = (e) => {
             if (e.cancelable) e.preventDefault();
             btn.classList.remove('active');
-            if (isHold) {
-                this.actions[actionName] = false;
-            } else {
-                // Short pulse
-                setTimeout(() => { this.actions[actionName] = false; }, 80);
-            }
+            this.actions[actionName] = false;
         };
 
         btn.addEventListener('touchstart', press, { passive: false });

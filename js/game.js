@@ -1,7 +1,8 @@
 // ═══════════════════════════════════════════════════
-// GAME ENGINE  —  DBZ × Pokémon: Anime Clash 3D
-// Complete rewrite: timer, rounds, combo system,
-// pause, stats, damage numbers, improved AI & camera
+// GAME ENGINE — Anime Clash 3D
+// Flujo de partida, rondas, entrada del jugador, colisiones, cámara y HUD.
+// Toda la lógica corre en step(dt), separada del dibujo: así el tiempo se
+// detiene de verdad en pausa y se pueden simular peleas para medir el equilibrio.
 // ═══════════════════════════════════════════════════
 
 class Game {
@@ -9,48 +10,52 @@ class Game {
         this.container = document.getElementById('canvas-container');
         this.clock = new THREE.Clock();
 
-        // Match State
-        this.state = 'loading'; // loading | menu | selection | countdown | fighting | paused | ended
+        // Match State: menu | countdown | fighting | ended | paused | gameover
+        this.state = 'menu';
+        this.resumeState = 'fighting';
         this.round = 1;
         this.maxRounds = 3;
         this.roundWins = { player: 0, cpu: 0 };
-        this.matchTimer = 60; // seconds per round
+        this.matchTimer = 60;
+        this.difficulty = 'normal';
         this.matchTimerEl = document.getElementById('battle-timer');
         this.roundLabelEl = document.getElementById('round-label');
 
-        // Stats (tracked per match)
-        this.stats = {
-            playerDamageDealt: 0,
-            playerCombos: 0,
-            playerMaxCombo: 0,
-            playerUltimates: 0,
-        };
+        this.resetStats();
 
         // Fighters
         this.player = null;
         this.enemy = null;
         this.playerType = 'goku';
         this.enemyType = 'pikachu';
+        this.ai = null;
+        this.autoPlayerAI = null; // solo para pruebas: la CPU maneja también al jugador
 
         // Systems
         this.vfx = null;
         this.arena = null;
         this.input = null;
 
-        // Combo state
+        // Combo
         this.comboTimer = 0;
         this.comboCount = 0;
         this.comboEl = document.getElementById('p1-combo');
         this.comboNumEl = document.getElementById('p1-combo-num');
 
-        // AI
-        this.aiTimer = 0;
-        this.aiAction = 'idle';
-        this.aiReactionDelay = 0.35;
+        // Tiempo de juego: tareas programadas, congelamiento de impacto y cámara lenta
+        this.tasks = [];
+        this.hitStop = 0;
+        this.slowMo = 0;
+        this.beamNumbers = new Map();
+        this.headless = false;
 
         this.initThree();
         this.initHUD();
         this.initPauseUI();
+    }
+
+    resetStats() {
+        this.stats = { playerDamageDealt: 0, playerCombos: 0, playerMaxCombo: 0, playerUltimates: 0 };
     }
 
     // ─────────────────────────────────────────────
@@ -77,11 +82,9 @@ class Game {
         this.renderer.outputEncoding = THREE.sRGBEncoding;
         this.container.appendChild(this.renderer.domElement);
 
-        // Hemisphere (sky/ground bounce)
         const hemi = new THREE.HemisphereLight(0xb0d8ff, 0x553311, 0.6);
         this.scene.add(hemi);
 
-        // Main directional light (sun)
         const sun = new THREE.DirectionalLight(0xfff5e0, 1.05);
         sun.position.set(10, 22, 12);
         sun.castShadow = true;
@@ -95,17 +98,14 @@ class Game {
         sun.shadow.bias = -0.001;
         this.scene.add(sun);
 
-        // Rim / fill light (from behind — dramatic anime look)
         const rim = new THREE.DirectionalLight(0x3366ff, 0.4);
         rim.position.set(-8, 10, -12);
         this.scene.add(rim);
 
-        // Systems
         this.vfx = new VFXManager(this.scene);
         this.arena = new Arena(this.scene);
         this.input = new InputManager();
 
-        // Camera smoothing state
         this.camTarget = new THREE.Vector3(0, 5.5, 17);
         this.camLookAt = new THREE.Vector3(0, 1.4, 0);
 
@@ -142,127 +142,170 @@ class Game {
 
         soundBtn && soundBtn.addEventListener('click', () => {
             window.soundManager.init();
-            const m = window.soundManager.toggleMute();
-            soundBtn.textContent = m ? '🔇' : '🔊';
+            const muted = window.soundManager.toggleMute();
+            soundBtn.textContent = muted ? '🔇' : '🔊';
+            if (!muted && ['countdown', 'fighting'].includes(this.state)) window.soundManager.startMusic();
         });
 
+        // iPhone no tiene pantalla completa para páginas web: se oculta el botón
+        const root = document.documentElement;
+        if (fsBtn && !root.requestFullscreen) fsBtn.classList.add('hidden');
         fsBtn && fsBtn.addEventListener('click', () => {
-            if (!document.fullscreenElement) {
-                document.documentElement.requestFullscreen().catch(() => {});
-            } else {
-                document.exitFullscreen().catch(() => {});
-            }
+            if (!document.fullscreenElement) root.requestFullscreen().catch(() => {});
+            else document.exitFullscreen().catch(() => {});
         });
 
         pauseBtn && pauseBtn.addEventListener('click', () => this.togglePause());
         resumeBtn && resumeBtn.addEventListener('click', () => this.togglePause());
-        quitBtn && quitBtn.addEventListener('click', () => {
-            this.state = 'menu';
-            document.getElementById('pause-screen').classList.add('hidden');
-            document.getElementById('hud').classList.add('hidden');
-            document.getElementById('touch-controls').classList.add('hidden');
-            document.getElementById('btn-pause').classList.add('hidden');
-            window.soundManager.stopMusic();
-            document.getElementById('title-screen').classList.remove('hidden');
+        quitBtn && quitBtn.addEventListener('click', () => this.quitToMenu());
+
+        window.addEventListener('keydown', e => {
+            if (e.key === 'Escape') this.togglePause();
         });
 
-        // Keyboard Escape for pause
-        window.addEventListener('keydown', e => {
-            if (e.key === 'Escape' && (this.state === 'fighting' || this.state === 'paused')) {
-                this.togglePause();
-            }
+        // Si el celular cambia de app o se bloquea, la pelea se pausa sola
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden && (this.state === 'fighting' || this.state === 'countdown')) this.togglePause();
+        });
+    }
+
+    setBattleUI(visible) {
+        ['hud', 'touch-controls', 'btn-pause'].forEach(id => {
+            document.getElementById(id).classList.toggle('hidden', !visible);
         });
     }
 
     // ─────────────────────────────────────────────
     //  Match Flow
     // ─────────────────────────────────────────────
-    startMatch(playerType, enemyType) {
+    startMatch(playerType, enemyType, difficulty = this.difficulty) {
         this.playerType = playerType;
         this.enemyType = enemyType;
+        this.difficulty = difficulty;
+        this.round = 1;
+        this.roundWins = { player: 0, cpu: 0 };
+        this.resetStats();
 
         window.soundManager.init();
         window.soundManager.startMusic();
 
-        this.clearFighters();
-
-        this.player = new Fighter(playerType, true, this.scene, this.vfx);
-        this.enemy  = new Fighter(enemyType, false, this.scene, this.vfx);
-
-        // Reset stats for this match
-        this.stats = { playerDamageDealt: 0, playerCombos: 0, playerMaxCombo: 0, playerUltimates: 0 };
-        this.comboCount = 0;
-        this.matchTimer = 60;
-
-        // HUD names
-        this.p1NameEl.textContent = playerType.toUpperCase();
-        this.p2NameEl.textContent = enemyType.toUpperCase();
-
-        // Show battle UI
         document.getElementById('selection-screen').classList.add('hidden');
         document.getElementById('gameover-screen').classList.add('hidden');
-        document.getElementById('hud').classList.remove('hidden');
-        document.getElementById('touch-controls').classList.remove('hidden');
-        document.getElementById('btn-pause').classList.remove('hidden');
-        document.getElementById('round-label').textContent = `ROUND ${this.round}`;
+        this.setBattleUI(true);
 
+        this.p1NameEl.textContent = FIGHTER_STATS[playerType].label;
+        this.p2NameEl.textContent = FIGHTER_STATS[enemyType].label;
+
+        this.startRound();
+    }
+
+    startRound() {
+        this.tasks = [];
+        this.clearFighters();
+        this.vfx.clear();
+        this.beamNumbers.clear();
+        this.hitStop = 0;
+        this.slowMo = 0;
+        this.comboCount = 0;
+        this.comboTimer = 0;
+        this.comboEl.classList.add('hidden');
+        this.matchTimer = 60;
+
+        const events = {
+            onHit: (attacker, target, dealt, info) => this.onFighterHit(attacker, target, dealt, info),
+            onBlock: (f) => { window.soundManager.playPunch(false); this.spawnLabel(f.position, 'BLOQUEO'); },
+            onUltimate: (f) => { if (f === this.player) this.stats.playerUltimates++; this.showAnnouncer(f.stats.ult.name, 900); },
+        };
+        this.player = new Fighter(this.playerType, true, this.scene, this.vfx, events);
+        this.enemy  = new Fighter(this.enemyType, false, this.scene, this.vfx, events);
+        this.ai = new FighterAI(this.enemy, this.player, this.vfx, this.difficulty);
+        if (this.autoPlayerAI) this.autoPlayerAI = new FighterAI(this.player, this.enemy, this.vfx, this.autoPlayerAI.levelName || 'normal');
+
+        this.roundLabelEl.textContent = `RONDA ${this.round}`;
+        this.refreshHUD();
         this.startCountdown();
     }
 
     clearFighters() {
-        if (this.player) { this.scene.remove(this.player.group); this.player = null; }
-        if (this.enemy)  { this.scene.remove(this.enemy.group);  this.enemy  = null; }
+        if (this.player) { this.player.dispose(); this.player = null; }
+        if (this.enemy)  { this.enemy.dispose();  this.enemy  = null; }
+    }
+
+    // Tareas en tiempo de juego: se congelan en pausa y se cancelan al salir.
+    after(seconds, fn) {
+        this.tasks.push({ t: seconds, fn });
+    }
+
+    tickTasks(dt) {
+        const due = [];
+        this.tasks = this.tasks.filter(task => {
+            task.t -= dt;
+            if (task.t <= 0) { due.push(task.fn); return false; }
+            return true;
+        });
+        due.forEach(fn => fn());
     }
 
     startCountdown() {
         this.state = 'countdown';
-        const steps = [
-            { text: '3', delay: 0 },
-            { text: '2', delay: 800 },
-            { text: '1', delay: 1600 },
-            { text: '¡PELEA!', delay: 2400 },
-        ];
-
-        steps.forEach(({ text, delay }) => {
-            setTimeout(() => {
-                if (this.state !== 'countdown') return;
-                this.showAnnouncer(text, 700);
-                window.soundManager.playCountdownBeep && window.soundManager.playCountdownBeep(text === '¡PELEA!');
-            }, delay);
+        const steps = ['3', '2', '1', '¡PELEA!'];
+        steps.forEach((text, i) => this.after(i * 0.8, () => {
+            this.showAnnouncer(text, 650);
+            window.soundManager.playPunch(i === 3);
+        }));
+        this.after(2.5, () => {
+            this.state = 'fighting';
+            this.vfx.shake(0.12);
         });
-
-        setTimeout(() => {
-            if (this.state === 'countdown') {
-                this.state = 'fighting';
-                this.vfx.shake(0.12);
-            }
-        }, 3100);
     }
 
     togglePause() {
-        if (this.state === 'fighting') {
+        const pauseScreen = document.getElementById('pause-screen');
+        if (this.state === 'fighting' || this.state === 'countdown') {
+            this.resumeState = this.state;
             this.state = 'paused';
-            document.getElementById('pause-screen').classList.remove('hidden');
+            pauseScreen.classList.remove('hidden');
             window.soundManager.stopMusic();
+            window.soundManager.stopKiCharge();
+            if (this.player) this.player.isCharging = false;
+            if (this.enemy) this.enemy.isCharging = false;
         } else if (this.state === 'paused') {
-            this.state = 'fighting';
-            document.getElementById('pause-screen').classList.add('hidden');
+            this.state = this.resumeState;
+            pauseScreen.classList.add('hidden');
+            window.soundManager.init();
             window.soundManager.startMusic();
+            [this.player, this.enemy].forEach(f => {
+                if (f && f.state === 'charge') f.setChargingSound(true);
+            });
         }
+    }
+
+    quitToMenu() {
+        this.tasks = [];
+        this.state = 'menu';
+        this.clearFighters();
+        this.vfx.clear();
+        document.getElementById('pause-screen').classList.add('hidden');
+        this.announcerEl.classList.add('hidden');
+        this.setBattleUI(false);
+        window.soundManager.stopMusic();
+        window.soundManager.stopKiCharge();
+        document.getElementById('title-screen').classList.remove('hidden');
     }
 
     showAnnouncer(text, duration = 1200) {
         const el = this.announcerEl;
-        if (!el) return;
+        if (!el || this.headless) return;
         el.textContent = text;
         el.classList.remove('hidden', 'ann-out');
         el.classList.add('ann-in');
 
         clearTimeout(this._annTimer);
+        clearTimeout(this._annHide);
         this._annTimer = setTimeout(() => {
             el.classList.remove('ann-in');
             el.classList.add('ann-out');
-            setTimeout(() => el.classList.add('hidden'), 350);
+            this._annHide = setTimeout(() => el.classList.add('hidden'), 350);
         }, duration);
     }
 
@@ -270,64 +313,45 @@ class Game {
     //  PLAYER INPUT
     // ─────────────────────────────────────────────
     handlePlayerInput(dt) {
-        if (!this.player || this.player.isDead || this.state !== 'fighting') return;
-        const mv = this.input.moveVector;
+        const p = this.player, input = this.input;
+        if (!p || p.isDead) return;
+        const mv = input.moveVector;
 
-        const moving = Math.abs(mv.x) > 0.06 || Math.abs(mv.z) > 0.06;
-        if (moving) {
-            let spd = this.player.speed;
-            if (this.input.actions.dash) {
-                spd *= 2.1;
-                window.soundManager.playDash();
-                this.vfx.emitAura(this.player.position, this.player.auraColor, 1);
-            }
-            this.player.position.x += mv.x * spd * dt;
-            this.player.position.z += mv.z * spd * 0.65 * dt;
+        p.guard(input.wants('guard'));
+        p.chargeKi(input.wants('charge'));
+        if (input.wants('dash')) p.dash(mv.x, mv.z, this.enemy);
+        if (input.wants('ultimate')) p.triggerUltimate(this.enemy);
+        if (input.wants('blast')) p.shootBlast(this.enemy);
+        if (input.wants('attack')) p.attack(this.enemy);
+        p.move(mv.x, mv.z, dt);
+    }
 
-            if (!['attack','blast','charge','ultimate','hurt'].includes(this.player.state)) {
-                this.player.setAnimation('run');
-            }
+    // ─────────────────────────────────────────────
+    //  GOLPES
+    // ─────────────────────────────────────────────
+    onFighterHit(attacker, target, dealt, info) {
+        if (attacker === this.player) {
+            this.stats.playerDamageDealt += dealt;
+            if (info.kind === 'melee') this.registerCombo();
         } else {
-            if (this.player.state === 'run') this.player.setAnimation('idle');
+            this.comboCount = 0;
+            this.comboTimer = 0;
+            this.comboEl.classList.add('hidden');
+            this.triggerDamageFlash();
         }
-
-        // Single-fire actions (guarded by cooldown inside Fighter)
-        if (this.input.actions.attack) this.doPlayerAttack();
-        if (this.input.actions.blast)  this.player.shootBlast(this.enemy);
-        if (this.input.actions.ultimate) this.doPlayerUltimate();
-
-        this.player.chargeKi(this.input.actions.charge);
+        if (info.heavy) this.hitStop = Math.max(this.hitStop, 0.07);
+        this.spawnDamageNumber(target.position, dealt, !!info.heavy);
+        if (target.isDead) this.slowMo = 0.9;
     }
 
-    doPlayerAttack() {
-        if (!this.player || !this.enemy) return;
-        const dmg = this.player.attack(this.enemy);
-        if (dmg > 0) {
-            this.stats.playerDamageDealt += dmg;
-            this.registerCombo(dmg);
-            this.triggerDamageFlash('red');
-            this.spawnDamageNumber(this.enemy.position, dmg, dmg >= 20);
-        }
-    }
-
-    doPlayerUltimate() {
-        if (!this.player || !this.enemy) return;
-        const ok = this.player.triggerUltimate(this.enemy);
-        if (ok) this.stats.playerUltimates++;
-    }
-
-    // ─────────────────────────────────────────────
-    //  COMBO SYSTEM
-    // ─────────────────────────────────────────────
-    registerCombo(dmg) {
-        this.comboTimer = 1.8;
+    registerCombo() {
+        this.comboTimer = 1.1;
         this.comboCount++;
         if (this.comboCount > this.stats.playerMaxCombo) this.stats.playerMaxCombo = this.comboCount;
-        if (this.comboCount >= 2) {
+        if (this.comboCount >= 2 && !this.headless) {
             this.stats.playerCombos++;
             this.comboEl.classList.remove('hidden');
             this.comboNumEl.textContent = this.comboCount;
-            // Re-trigger CSS animation
             this.comboEl.style.animation = 'none';
             void this.comboEl.offsetWidth;
             this.comboEl.style.animation = '';
@@ -345,145 +369,79 @@ class Game {
     }
 
     // ─────────────────────────────────────────────
-    //  IMPROVED AI
-    // ─────────────────────────────────────────────
-    updateAI(dt) {
-        if (!this.enemy || this.enemy.isDead || this.state !== 'fighting') return;
-
-        this.aiTimer -= dt;
-        const dist = this.enemy.position.distanceTo(this.player.position);
-        const dx   = this.player.position.x - this.enemy.position.x;
-        const dz   = this.player.position.z - this.enemy.position.z;
-        const enemyHPPct = this.enemy.health / this.enemy.maxHealth;
-        const playerHPPct = this.player.health / this.player.maxHealth;
-
-        if (this.aiTimer <= 0) {
-            // Adapt reaction time to difficulty: faster when enemy HP low
-            this.aiTimer = 0.28 + Math.random() * 0.42 + (1 - enemyHPPct) * 0.1;
-
-            const hasUltimate = this.enemy.ki >= this.enemy.ultimateCost;
-            const rng = Math.random();
-
-            if (hasUltimate && rng < 0.55) {
-                this.aiAction = 'ultimate';
-            } else if (dist < 2.2) {
-                if (rng < 0.6) this.aiAction = 'attack';
-                else if (rng < 0.8) this.aiAction = 'retreat';
-                else this.aiAction = 'blast';
-            } else if (dist < 5) {
-                if (this.enemy.ki >= 15 && rng < 0.4) this.aiAction = 'blast';
-                else if (rng < 0.7) this.aiAction = 'approach';
-                else this.aiAction = 'retreat';
-            } else {
-                if (this.enemy.ki < 55 && rng < 0.6) this.aiAction = 'charge';
-                else if (this.enemy.ki >= 15 && rng < 0.55) this.aiAction = 'blast';
-                else this.aiAction = 'approach';
-            }
-
-            // Aggressive when winning, defensive when losing
-            if (playerHPPct < 0.3 && rng < 0.7) this.aiAction = 'approach';
-            if (enemyHPPct < 0.2 && dist > 3)   this.aiAction = 'blast';
-        }
-
-        const spd = this.enemy.speed;
-        switch (this.aiAction) {
-            case 'approach': {
-                this.enemy.position.x += Math.sign(dx) * spd * 0.82 * dt;
-                this.enemy.position.z += Math.sign(dz) * spd * 0.5 * dt;
-                if (this.enemy.state === 'idle') this.enemy.setAnimation('run');
-                this.enemy.chargeKi(false);
-                break;
-            }
-            case 'retreat': {
-                this.enemy.position.x -= Math.sign(dx) * spd * 0.9 * dt;
-                this.enemy.position.z -= Math.sign(dz) * spd * 0.4 * dt;
-                if (this.enemy.state === 'idle') this.enemy.setAnimation('run');
-                this.enemy.chargeKi(false);
-                break;
-            }
-            case 'attack': {
-                this.enemy.chargeKi(false);
-                if (dist < 2.5) {
-                    const dmg = this.enemy.attack(this.player);
-                    if (dmg > 0) {
-                        this.triggerDamageFlash('blue');
-                        this.spawnDamageNumber(this.player.position, dmg, dmg >= 20);
-                    }
-                } else {
-                    this.aiAction = 'approach';
-                }
-                break;
-            }
-            case 'blast': {
-                this.enemy.chargeKi(false);
-                this.enemy.shootBlast(this.player);
-                this.aiAction = 'idle';
-                break;
-            }
-            case 'charge': {
-                this.enemy.chargeKi(true);
-                break;
-            }
-            case 'ultimate': {
-                this.enemy.chargeKi(false);
-                const ok = this.enemy.triggerUltimate(this.player);
-                this.aiAction = ok ? 'idle' : 'approach';
-                break;
-            }
-            default: {
-                this.enemy.chargeKi(false);
-                if (this.enemy.state === 'run') this.enemy.setAnimation('idle');
-                break;
-            }
-        }
-    }
-
-    // ─────────────────────────────────────────────
     //  COLLISION
     // ─────────────────────────────────────────────
-    checkCollisions() {
-        // Projectiles
+    opponentOf(f) {
+        return f === this.player ? this.enemy : this.player;
+    }
+
+    checkCollisions(dt) {
         const projs = this.vfx.projectiles;
         for (let i = projs.length - 1; i >= 0; i--) {
             const p = projs[i];
-            const target = p.owner === this.player ? this.enemy : this.player;
+            const target = this.opponentOf(p.owner);
             if (!target || target.isDead) continue;
-            const hp = target.position.clone().add(new THREE.Vector3(0, 1.2, 0));
-            if (p.mesh.position.distanceTo(hp) < p.radius + 0.95) {
-                const dmg = target.applyDamage(p.damage, p.owner, false);
-                this.vfx.createHitSparks(p.mesh.position, p.color, 18);
-                this.spawnDamageNumber(target.position, dmg, false);
-                if (p.owner === this.player) this.stats.playerDamageDealt += dmg;
-                if (target === this.enemy) this.triggerDamageFlash('red');
-                else { this.triggerDamageFlash('blue'); }
+
+            const hp = target.position.clone();
+            hp.y = target.stats.muzzleY;
+            if (p.mesh.position.distanceTo(hp) < p.radius + 0.8) {
+                const dealt = target.receiveHit({ amount: p.damage, attacker: p.owner, kind: 'shot' });
+                // Con invulnerabilidad el proyectil sigue de largo: esquivar se nota
+                if (dealt <= 0) continue;
+                this.vfx.createHitSparks(p.mesh.position, p.color, 14);
                 window.soundManager.playPunch(false);
-                this.scene.remove(p.mesh);
-                projs.splice(i, 1);
+                this.onFighterHit(p.owner, target, dealt, { kind: 'shot' });
+                this.vfx.removeProjectile(i);
             }
         }
 
-        // Beams
-        for (const b of this.vfx.beams) {
-            const target = b.owner === this.player ? this.enemy : this.player;
-            if (!target || target.isDead) continue;
-            const toT = target.position.clone().sub(b.startPos);
-            const along = toT.dot(b.direction);
-            if (along > 0 && along < b.length) {
-                const closest = b.startPos.clone().addScaledVector(b.direction, along);
-                if (target.position.distanceTo(closest) < b.radius + 1.3) {
-                    const dmg = target.applyDamage(b.damage * (1/60), b.owner, true);
-                    if (b.owner === this.player) this.stats.playerDamageDealt += dmg;
-                    if (Math.random() < 0.25) {
-                        this.vfx.createHitSparks(target.position.clone().add(new THREE.Vector3(0,1,0)), b.color, 6);
-                        this.spawnDamageNumber(target.position, dmg * 60 | 0, false);
-                    }
+        // Dos disparos que chocan se anulan
+        for (let i = projs.length - 1; i > 0; i--) {
+            for (let j = i - 1; j >= 0; j--) {
+                if (projs[i].owner === projs[j].owner) continue;
+                const reach = projs[i].radius + projs[j].radius;
+                if (projs[i].mesh.position.distanceTo(projs[j].mesh.position) < reach) {
+                    this.vfx.createHitSparks(projs[i].mesh.position, 0xffffff, 12);
+                    this.vfx.removeProjectile(i);
+                    this.vfx.removeProjectile(j);
+                    i--;
+                    break;
                 }
             }
+        }
+
+        for (const b of this.vfx.beams) {
+            const target = this.opponentOf(b.owner);
+            if (!target || target.isDead) continue;
+            const toT = target.position.clone().sub(b.startPos);
+            toT.y = 0;
+            const along = toT.dot(b.direction);
+            if (along < 0 || along > b.length) continue;
+            const lateral = toT.addScaledVector(b.direction, -along).length();
+            if (lateral > b.radius + 0.55) continue;
+
+            const dealt = target.receiveHit({
+                amount: (b.damage / b.duration) * dt, attacker: b.owner, kind: 'beam', continuous: true,
+            });
+            if (dealt <= 0) continue;
+            if (b.owner === this.player) this.stats.playerDamageDealt += dealt;
+            else this.triggerDamageFlash();
+
+            // El daño del rayo se muestra agrupado, no un número por cuadro
+            const acc = (this.beamNumbers.get(b) || 0) + dealt;
+            if (acc >= 5 || target.isDead) {
+                this.spawnDamageNumber(target.position, acc, false);
+                this.vfx.createHitSparks(target.position.clone().setY(target.stats.muzzleY), b.color, 5);
+                this.beamNumbers.set(b, 0);
+            } else {
+                this.beamNumbers.set(b, acc);
+            }
+            if (target.isDead) this.slowMo = 0.9;
         }
     }
 
     // ─────────────────────────────────────────────
-    //  CAMERA — Cinematic Fighting Camera
+    //  CAMERA
     // ─────────────────────────────────────────────
     updateCamera(dt) {
         if (!this.player || !this.enemy) return;
@@ -492,186 +450,204 @@ class Game {
         const midX = (px + ex) * 0.5;
         const midZ = (pz + ez) * 0.5;
         const gap  = Math.hypot(px - ex, pz - ez);
-        const pullback = Math.max(8, gap * 0.8);
+
+        // La distancia sale del ancho que hay que encuadrar y del formato de pantalla,
+        // para que ningún luchador quede afuera ni en un celular angosto.
+        const halfWidth = gap / 2 + 2.6;
+        const tanH = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2)) * this.camera.aspect;
+        const dist = Math.max(8.5, halfWidth / tanH);
+        const shake = this.vfx.cameraShakeOffset;
 
         this.camTarget.set(
-            midX * 0.6 + this.vfx.cameraShakeOffset.x,
-            4.2 + gap * 0.12 + this.vfx.cameraShakeOffset.y,
-            11 + pullback * 0.55 + this.vfx.cameraShakeOffset.z
+            midX + shake.x,
+            2.4 + dist * 0.2 + shake.y,
+            midZ * 0.6 + dist + shake.z
         );
-        this.camLookAt.set(midX * 0.8, 1.6, midZ * 0.4);
+        this.camLookAt.set(midX, 1.35, midZ * 0.6);
 
-        this.camera.position.lerp(this.camTarget, dt * 5.5);
+        this.camera.position.lerp(this.camTarget, Math.min(1, dt * 5.5));
         this.camera.lookAt(this.camLookAt);
     }
 
     // ─────────────────────────────────────────────
     //  HUD UPDATE
     // ─────────────────────────────────────────────
-    updateHUD(dt) {
-        if (!this.player || !this.enemy) return;
-
-        // HP bars
-        const p1Pct = Math.max(0, (this.player.health / this.player.maxHealth) * 100);
-        const p2Pct = Math.max(0, (this.enemy.health  / this.enemy.maxHealth)  * 100);
-        this.p1HP.style.width = p1Pct + '%';
-        this.p2HP.style.width = p2Pct + '%';
-
-        // Ki bars
+    refreshHUD() {
+        if (!this.player || !this.enemy || this.headless) return;
+        this.p1HP.style.width = Math.max(0, (this.player.health / this.player.maxHealth) * 100) + '%';
+        this.p2HP.style.width = Math.max(0, (this.enemy.health  / this.enemy.maxHealth)  * 100) + '%';
         this.p1Ki.style.width = Math.max(0, (this.player.ki / this.player.maxKi) * 100) + '%';
         this.p2Ki.style.width = Math.max(0, (this.enemy.ki  / this.enemy.maxKi)  * 100) + '%';
 
-        // Ultimate button glow
         if (this.btnUltimate) {
             this.btnUltimate.classList.toggle('ready', this.player.ki >= this.player.ultimateCost);
         }
 
-        // Match Timer (only during fighting)
-        if (this.state === 'fighting') {
-            this.matchTimer = Math.max(0, this.matchTimer - dt);
-            const secs = Math.ceil(this.matchTimer);
-            this.matchTimerEl.textContent = secs;
-            this.matchTimerEl.classList.toggle('urgent', secs <= 10);
-
-            if (this.matchTimer <= 0) this.timeoutDraw();
-        }
+        const secs = Math.ceil(this.matchTimer);
+        if (this.matchTimerEl.textContent !== String(secs)) this.matchTimerEl.textContent = secs;
+        this.matchTimerEl.classList.toggle('urgent', secs <= 10);
     }
 
     // ─────────────────────────────────────────────
     //  MATCH END LOGIC
     // ─────────────────────────────────────────────
-    checkMatchEnd() {
-        if (this.state !== 'fighting') return;
-        if (!this.player.isDead && !this.enemy.isDead) return;
-
-        const playerWon = !this.player.isDead && this.enemy.isDead;
-        this.endRound(playerWon);
+    checkRoundEnd(dt) {
+        if (this.player.isDead || this.enemy.isDead) {
+            let winner = 'draw';
+            if (!this.player.isDead) winner = 'player';
+            else if (!this.enemy.isDead) winner = 'cpu';
+            this.endRound(winner, 'ko');
+            return;
+        }
+        this.matchTimer = Math.max(0, this.matchTimer - dt);
+        if (this.matchTimer <= 0) {
+            const a = this.player.health / this.player.maxHealth;
+            const b = this.enemy.health / this.enemy.maxHealth;
+            const winner = Math.abs(a - b) < 0.001 ? 'draw' : (a > b ? 'player' : 'cpu');
+            this.endRound(winner, 'time');
+        }
     }
 
-    timeoutDraw() {
-        if (this.state !== 'fighting') return;
-        // Win goes to whoever has more HP
-        const playerWon = this.player.health >= this.enemy.health;
-        this.endRound(playerWon);
-    }
-
-    endRound(playerWon) {
+    endRound(winner, reason) {
         this.state = 'ended';
-        const winner = playerWon ? 'player' : 'cpu';
-        this.roundWins[winner]++;
-        window.soundManager.stopKiCharge();
+        if (winner !== 'draw') this.roundWins[winner]++;
 
-        setTimeout(() => {
-            this.showAnnouncer(playerWon ? 'K.O.!' : 'K.O.!', 1600);
-            if (playerWon) window.soundManager.playVictory();
+        [this.player, this.enemy].forEach(f => { f.chargeKi(false); f.guard(false); });
 
-            setTimeout(() => {
-                if (this.roundWins.player >= 2 || this.roundWins.cpu >= 2 || this.round >= this.maxRounds) {
-                    this.showGameOver(this.roundWins.player > this.roundWins.cpu);
-                } else {
-                    this.round++;
-                    this.matchTimer = 60;
-                    this.clearFighters();
-                    this.player = new Fighter(this.playerType, true, this.scene, this.vfx);
-                    this.enemy  = new Fighter(this.enemyType, false, this.scene, this.vfx);
-                    document.getElementById('round-label').textContent = `ROUND ${this.round}`;
-                    this.startCountdown();
-                }
-            }, 2000);
-        }, 500);
+        const headline = reason === 'ko' ? 'K.O.' : '¡TIEMPO!';
+        const winnerName = winner === 'draw' ? 'EMPATE'
+            : `RONDA PARA ${FIGHTER_STATS[winner === 'player' ? this.playerType : this.enemyType].label}`;
+
+        this.after(0.5, () => {
+            this.showAnnouncer(headline, 900);
+            if (winner === 'player') window.soundManager.playVictory();
+        });
+        this.after(1.6, () => this.showAnnouncer(winnerName, 900));
+        this.after(3.0, () => {
+            const decided = this.roundWins.player >= 2 || this.roundWins.cpu >= 2 || this.round >= this.maxRounds;
+            if (decided) {
+                this.showGameOver();
+            } else {
+                this.round++;
+                this.startRound();
+            }
+        });
     }
 
-    showGameOver(won) {
+    showGameOver() {
+        this.state = 'gameover';
+        const { player, cpu } = this.roundWins;
+        const result = player === cpu ? 'draw' : (player > cpu ? 'win' : 'lose');
+        this.lastResult = result;
+        window.soundManager.stopMusic();
+        if (this.headless) return;
+
         const title = document.getElementById('go-title');
         const sub   = document.getElementById('go-sub');
         const stats = document.getElementById('go-stats');
+        const me = FIGHTER_STATS[this.playerType].label;
+        const rival = FIGHTER_STATS[this.enemyType].label;
 
-        title.textContent = won ? '¡VICTORIA!' : '¡DERROTA!';
-        title.style.color = won ? '#ffd700' : '#ff4444';
-
-        sub.textContent = won
-            ? `¡${this.playerType.toUpperCase()} venció a ${this.enemyType.toUpperCase()}!`
-            : `${this.enemyType.toUpperCase()} demostró ser más fuerte...`;
+        title.textContent = { win: '¡VICTORIA!', lose: 'DERROTA', draw: 'EMPATE' }[result];
+        title.style.color = { win: '#ffd700', lose: '#ff4444', draw: '#ffffff' }[result];
+        sub.textContent = {
+            win: `${me} venció a ${rival}`,
+            lose: `${rival} venció a ${me}`,
+            draw: `${me} y ${rival} terminaron igualados`,
+        }[result];
 
         stats.innerHTML = `
-            <div class="go-stat"><div class="go-stat-num">${this.stats.playerDamageDealt | 0}</div><div class="go-stat-lbl">Daño Total</div></div>
-            <div class="go-stat"><div class="go-stat-num">${this.stats.playerMaxCombo}</div><div class="go-stat-lbl">Max Combo</div></div>
-            <div class="go-stat"><div class="go-stat-num">${this.stats.playerUltimates}</div><div class="go-stat-lbl">Ultimates</div></div>
-            <div class="go-stat"><div class="go-stat-num">${this.roundWins.player}-${this.roundWins.cpu}</div><div class="go-stat-lbl">Rondas</div></div>
+            <div class="go-stat"><div class="go-stat-num">${Math.round(this.stats.playerDamageDealt)}</div><div class="go-stat-lbl">Daño total</div></div>
+            <div class="go-stat"><div class="go-stat-num">${this.stats.playerMaxCombo}</div><div class="go-stat-lbl">Mejor combo</div></div>
+            <div class="go-stat"><div class="go-stat-num">${this.stats.playerUltimates}</div><div class="go-stat-lbl">Definitivos</div></div>
+            <div class="go-stat"><div class="go-stat-num">${player}-${cpu}</div><div class="go-stat-lbl">Rondas</div></div>
         `;
 
-        document.getElementById('hud').classList.add('hidden');
-        document.getElementById('touch-controls').classList.add('hidden');
-        document.getElementById('btn-pause').classList.add('hidden');
+        this.setBattleUI(false);
         document.getElementById('gameover-screen').classList.remove('hidden');
-
-        this.round = 1;
-        this.roundWins = { player: 0, cpu: 0 };
-        window.soundManager.stopMusic();
     }
 
     // ─────────────────────────────────────────────
     //  VISUAL HELPERS
     // ─────────────────────────────────────────────
-    triggerDamageFlash(color) {
+    triggerDamageFlash() {
         const el = this.damageFlash;
-        if (!el) return;
+        if (!el || this.headless) return;
         el.classList.remove('flash-red', 'flash-blue');
         void el.offsetWidth;
-        el.classList.add('flash-' + color);
+        el.classList.add('flash-red');
     }
 
-    spawnDamageNumber(worldPos, damage, critical) {
-        if (damage <= 0) return;
-        const dmgInt = damage | 0;
-        if (dmgInt === 0) return;
-
-        // Project 3D to 2D
-        const v = worldPos.clone().add(new THREE.Vector3((Math.random()-0.5)*1.5, 2.2, 0));
+    screenPos(worldPos) {
+        const v = worldPos.clone();
+        v.x += (Math.random() - 0.5) * 1.2;
+        v.y += 2.2;
         v.project(this.camera);
-        const x = (v.x * 0.5 + 0.5) * window.innerWidth;
-        const y = (1 - (v.y * 0.5 + 0.5)) * window.innerHeight;
+        return { x: (v.x * 0.5 + 0.5) * window.innerWidth, y: (1 - (v.y * 0.5 + 0.5)) * window.innerHeight };
+    }
 
+    spawnFloating(worldPos, text, className) {
+        if (this.headless) return;
+        const { x, y } = this.screenPos(worldPos);
         if (x < -50 || x > window.innerWidth + 50) return;
-
         const el = document.createElement('div');
-        el.className = 'dmg-text' + (critical ? ' critical' : '');
-        el.textContent = critical ? `💥${dmgInt}` : dmgInt;
+        el.className = className;
+        el.textContent = text;
         el.style.left = x + 'px';
         el.style.top  = y + 'px';
         document.body.appendChild(el);
         el.addEventListener('animationend', () => el.remove());
     }
 
+    spawnDamageNumber(worldPos, damage, critical) {
+        const n = Math.round(damage);
+        if (n <= 0) return;
+        this.spawnFloating(worldPos, n, 'dmg-text' + (critical ? ' critical' : ''));
+    }
+
+    spawnLabel(worldPos, text) {
+        this.spawnFloating(worldPos, text, 'dmg-text');
+    }
+
     // ─────────────────────────────────────────────
     //  MAIN LOOP
     // ─────────────────────────────────────────────
-    animate() {
-        requestAnimationFrame(() => this.animate());
-        const dt = Math.min(this.clock.getDelta(), 0.08);
+    step(rawDt) {
+        if (this.state === 'paused' || this.state === 'menu') return;
 
-        const active = this.state === 'fighting' || this.state === 'countdown' || this.state === 'ended';
+        // Impacto y cámara lenta afectan al mundo, no a los menús ni al reloj real
+        let dt = rawDt;
+        if (this.hitStop > 0) { this.hitStop -= rawDt; dt *= 0.08; }
+        else if (this.slowMo > 0) { this.slowMo -= rawDt; dt *= 0.35; }
 
-        if (active) {
-            if (this.state === 'fighting') {
-                this.handlePlayerInput(dt);
-                this.updateAI(dt);
-                this.tickCombo(dt);
-            }
+        if (this.state === 'fighting') {
+            if (this.autoPlayerAI) this.autoPlayerAI.update(dt);
+            else this.handlePlayerInput(dt);
+            this.ai.update(dt);
+            this.tickCombo(dt);
+        }
 
-            if (this.player) this.player.update(dt, this.enemy);
-            if (this.enemy)  this.enemy.update(dt, this.player);
+        if (this.player && this.enemy) {
+            this.player.update(dt, this.enemy);
+            this.enemy.update(dt, this.player);
+        }
 
-            if (this.state === 'fighting') {
-                this.checkCollisions();
-                this.updateHUD(dt);
-                this.checkMatchEnd();
-            }
-
-            this.updateCamera(dt);
+        if (this.state === 'fighting') {
+            this.checkCollisions(dt);
+            this.checkRoundEnd(dt);
         }
 
         this.vfx.update(dt);
+        this.tickTasks(rawDt);
+        this.input.endFrame();
+        this.refreshHUD();
+        this.updateCamera(dt);
+    }
+
+    animate() {
+        requestAnimationFrame(() => this.animate());
+        const dt = Math.min(this.clock.getDelta(), 0.08);
+        this.step(dt);
         this.renderer.render(this.scene, this.camera);
     }
 }

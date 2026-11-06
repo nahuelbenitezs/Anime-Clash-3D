@@ -11,11 +11,37 @@ class VFXManager {
         this.cameraShakeOffset = new THREE.Vector3();
     }
 
+    disposeObject(obj) {
+        this.scene.remove(obj);
+        obj.traverse(o => {
+            if (o.geometry) o.geometry.dispose();
+            if (o.material) o.material.dispose();
+        });
+    }
+
+    removeProjectile(index) {
+        this.disposeObject(this.projectiles[index].mesh);
+        this.projectiles.splice(index, 1);
+    }
+
+    // Limpia todos los efectos: entre rondas no debe sobrevivir ningún disparo
+    clear() {
+        [...this.particles, ...this.shockwaves, ...this.projectiles, ...this.beams]
+            .forEach(item => this.disposeObject(item.mesh));
+        this.particles = [];
+        this.shockwaves = [];
+        this.projectiles = [];
+        this.beams = [];
+        this.screenShakeIntensity = 0;
+        this.cameraShakeOffset.set(0, 0, 0);
+    }
+
     // Trigger screen shake
     shake(amount = 0.4) {
         this.screenShakeIntensity = Math.max(this.screenShakeIntensity, amount);
-        if (navigator.vibrate) {
-            try { navigator.vibrate(Math.min(150, Math.floor(amount * 200))); } catch(e){}
+        const gestured = !navigator.userActivation || navigator.userActivation.hasBeenActive;
+        if (navigator.vibrate && gestured) {
+            navigator.vibrate(Math.min(150, Math.floor(amount * 200)));
         }
     }
 
@@ -303,8 +329,7 @@ class VFXManager {
             const proj = this.projectiles[i];
             proj.life -= dt;
             if (proj.life <= 0) {
-                this.scene.remove(proj.mesh);
-                this.projectiles.splice(i, 1);
+                this.removeProjectile(i);
                 continue;
             }
             proj.mesh.position.addScaledVector(proj.velocity, dt);
@@ -322,7 +347,7 @@ class VFXManager {
             const beam = this.beams[i];
             beam.life -= dt;
             if (beam.life <= 0) {
-                this.scene.remove(beam.mesh);
+                this.disposeObject(beam.mesh);
                 this.beams.splice(i, 1);
                 continue;
             }

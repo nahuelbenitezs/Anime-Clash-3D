@@ -1,4 +1,7 @@
 // Model Loader: Loads real GLTF/GLB models for Goku, Pikachu, Charizard with Draco support
+// Subir este número al cambiar un .glb: evita que el navegador use la copia vieja.
+const ASSET_VERSION = 2;
+
 class ModelLoader {
     constructor() {
         this.cache = {};
@@ -12,7 +15,7 @@ class ModelLoader {
     initLoaders() {
         if (typeof THREE.DRACOLoader !== 'undefined') {
             this.dracoLoader = new THREE.DRACOLoader();
-            this.dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.4.3/');
+            this.dracoLoader.setDecoderPath('vendor/draco/');
         }
 
         if (typeof THREE.GLTFLoader !== 'undefined') {
@@ -57,6 +60,51 @@ class ModelLoader {
                 delete this.loadingPromises[type];
             }
         );
+    }
+
+    // Precarga todo antes de mostrar el menú e informa el avance real (0 a 1).
+    preload(types, onProgress) {
+        const loaded = {};
+        const report = () => {
+            const sum = types.reduce((acc, t) => acc + (loaded[t] || 0), 0);
+            onProgress(sum / types.length);
+        };
+        return Promise.all(types.map(type => new Promise(resolve => {
+            if (!this.gltfLoader) { resolve(); return; }
+            this.gltfLoader.load(`assets/${type}.glb?v=${ASSET_VERSION}`, (gltf) => {
+                this.cache[type] = gltf;
+                loaded[type] = 1;
+                report();
+                resolve();
+            }, (e) => {
+                if (e.lengthComputable) { loaded[type] = 0.95 * e.loaded / e.total; report(); }
+            }, (err) => {
+                console.warn(`No se pudo cargar ${type}, se usa el modelo de respaldo.`, err);
+                loaded[type] = 1;
+                report();
+                resolve();
+            });
+        })));
+    }
+
+    // Caja de la malla deformada por los huesos. Box3.setFromObject mira la geometría
+    // cruda y, en modelos con el esqueleto a otra escala, da un tamaño equivocado.
+    skinnedBox(root) {
+        root.updateMatrixWorld(true);
+        const box = new THREE.Box3();
+        const v = new THREE.Vector3();
+        root.traverse(o => {
+            if (!o.isSkinnedMesh) return;
+            const pos = o.geometry.attributes.position;
+            for (let i = 0; i < pos.count; i += 3) {
+                v.fromBufferAttribute(pos, i);
+                o.boneTransform(i, v);
+                v.applyMatrix4(o.matrixWorld);
+                box.expandByPoint(v);
+            }
+        });
+        if (box.isEmpty()) box.setFromObject(root);
+        return box;
     }
 
     cloneModel(type) {
