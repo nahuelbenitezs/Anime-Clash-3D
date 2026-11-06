@@ -2,8 +2,46 @@
 // Subir este número al cambiar un .glb: evita que el navegador use la copia vieja.
 const ASSET_VERSION = 2;
 
+// Los colores se escriben en sRGB, pero el motor los trata como lineales: sin convertir,
+// la tinta sale gris y los tonos oscuros, lavados.
+window.inkColor = (hex) => new THREE.Color(hex).convertSRGBToLinear();
+
+// Rampa de tres tonos para el sombreado de tinta. Se comparte entre todos los materiales.
+let _toonRamp = null;
+window.toonRamp = function () {
+    if (_toonRamp) return _toonRamp;
+    const data = new Uint8Array([120, 120, 120, 200, 200, 200, 255, 255, 255]);
+    _toonRamp = new THREE.DataTexture(data, 3, 1, THREE.RGBFormat);
+    _toonRamp.minFilter = THREE.NearestFilter;
+    _toonRamp.magFilter = THREE.NearestFilter;
+    _toonRamp.generateMipmaps = false;
+    _toonRamp.needsUpdate = true;
+    return _toonRamp;
+};
+
+// Contorno de tinta: la malla por dentro, inflada a lo largo de sus normales.
+window.makeOutlineMaterial = function (width, skinning, morphTargets) {
+    const mat = new THREE.MeshBasicMaterial({ color: window.inkColor(0x14100c), side: THREE.BackSide, skinning, morphTargets });
+    mat.onBeforeCompile = (shader) => {
+        shader.vertexShader = shader.vertexShader.replace(
+            '#include <begin_vertex>',
+            `vec3 transformed = vec3(position) + normalize(normal) * ${width.toFixed(5)};`
+        );
+    };
+    mat.customProgramCacheKey = () => 'outline' + width + skinning + morphTargets;
+    return mat;
+};
+
+// Grosor del contorno en unidades de la geometría de cada modelo (sus escalas difieren mucho)
+const OUTLINE_WIDTH = { pikachu: 0.012, charizard: 0.016 };
+
 class ModelLoader {
     constructor() {
+        this.basePose = {
+            goku: { clip: '02-STANCE', time: 1, flip: true },
+            pikachu: { clip: 'Impactrueno', time: 2.2 },
+            charizard: { clip: 'Chariard_dizzy', time: 0 },
+        };
         this.cache = {};
         this.loadingPromises = {};
         this.dracoLoader = null;
@@ -49,6 +87,7 @@ class ModelLoader {
         this.gltfLoader.load(
             url,
             (gltf) => {
+                this.prepareStyle(type, gltf);
                 this.cache[type] = gltf;
                 const callbacks = this.loadingPromises[type] || [];
                 delete this.loadingPromises[type];
@@ -62,6 +101,44 @@ class ModelLoader {
         );
     }
 
+    // Unifica el estilo: todos los modelos pasan a sombreado de tinta. Goku ya trae su
+    // propio contorno (el material LINE); a los otros se les agrega.
+    prepareStyle(type, gltf) {
+        const meshes = [];
+        gltf.scene.traverse(o => { if (o.isMesh) meshes.push(o); });
+        meshes.forEach(mesh => {
+            const old = mesh.material;
+            if (old.name === 'LINE') return;
+            const isFire = type === 'charizard' && mesh.geometry.attributes.position.count < 200;
+            if (isFire) {
+                // Llama de la cola: sin sombreado y siempre brillante
+                mesh.material = new THREE.MeshBasicMaterial({
+                    map: old.map, color: window.inkColor(0xffb347), skinning: true, transparent: true,
+                    blending: THREE.AdditiveBlending, depthWrite: false,
+                });
+                mesh.userData.noOutline = true;
+                return;
+            }
+            mesh.material = new THREE.MeshToonMaterial({
+                map: old.map, color: 0xffffff, gradientMap: window.toonRamp(),
+                skinning: !!mesh.isSkinnedMesh, morphTargets: old.morphTargets,
+                transparent: old.transparent, alphaTest: old.alphaTest, side: old.side,
+            });
+            if (old.map) old.map.anisotropy = 2;
+        });
+        const width = OUTLINE_WIDTH[type];
+        if (!width) return;
+        meshes.forEach(mesh => {
+            if (!mesh.isSkinnedMesh || mesh.userData.noOutline) return;
+            if (mesh.geometry.attributes.position.count < 150) return;
+            const hull = new THREE.SkinnedMesh(mesh.geometry, window.makeOutlineMaterial(width, true, false));
+            hull.bind(mesh.skeleton, mesh.bindMatrix);
+            hull.name = mesh.name + '_outline';
+            hull.frustumCulled = false;
+            mesh.parent.add(hull);
+        });
+    }
+
     // Precarga todo antes de mostrar el menú e informa el avance real (0 a 1).
     preload(types, onProgress) {
         const loaded = {};
@@ -72,6 +149,7 @@ class ModelLoader {
         return Promise.all(types.map(type => new Promise(resolve => {
             if (!this.gltfLoader) { resolve(); return; }
             this.gltfLoader.load(`assets/${type}.glb?v=${ASSET_VERSION}`, (gltf) => {
+                this.prepareStyle(type, gltf);
                 this.cache[type] = gltf;
                 loaded[type] = 1;
                 report();
@@ -121,8 +199,10 @@ class ModelLoader {
         // Enable shadows on meshes
         clonedScene.traverse(child => {
             if (child.isMesh) {
-                child.castShadow = true;
-                child.receiveShadow = true;
+                child.frustumCulled = false;
+                const isHull = child.material.side === THREE.BackSide || child.material.blending === THREE.AdditiveBlending;
+                child.castShadow = !isHull;
+                child.receiveShadow = false;
             }
         });
 

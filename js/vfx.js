@@ -1,381 +1,476 @@
-// Visual Effects (VFX) System: Particles, Auras, Energy Beams, and Impacts
+// Efectos visuales con estilo de manga: estrellas de impacto, líneas de velocidad,
+// partículas en un solo lote y rayos con contorno de tinta.
+//
+// Las partículas comparten un único objeto Points (una sola llamada de dibujo) y las
+// geometrías se reutilizan. Antes cada chispa era una malla nueva con su material.
+const MAX_PARTICLES = 420;
+
+const PARTICLE_VERTEX = `
+    attribute float aSize;
+    attribute float aAlpha;
+    attribute vec3 aColor;
+    varying float vAlpha;
+    varying vec3 vColor;
+    uniform float uScale;
+    void main() {
+        vAlpha = aAlpha;
+        vColor = aColor;
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        gl_PointSize = aSize * uScale / max(0.1, -mv.z);
+        gl_Position = projectionMatrix * mv;
+    }
+`;
+
+// Rombo de bordes duros con línea de tinta: se lee como una chispa dibujada.
+const PARTICLE_FRAGMENT = `
+    varying float vAlpha;
+    varying vec3 vColor;
+    void main() {
+        vec2 p = abs(gl_PointCoord - 0.5) * 2.0;
+        float d = p.x + p.y;
+        if (d > 1.0 || vAlpha <= 0.01) discard;
+        vec3 color = d > 0.72 ? vec3(0.08, 0.06, 0.05) : mix(vColor, vec3(1.0), 0.15);
+        gl_FragColor = vec4(color, vAlpha);
+    }
+`;
+
 class VFXManager {
     constructor(scene) {
         this.scene = scene;
-        this.particles = [];
         this.projectiles = [];
         this.beams = [];
-        this.shockwaves = [];
+        this.bursts = [];
+        this.bolts = [];
         this.screenShakeIntensity = 0;
         this.screenShakeDecay = 0.9;
         this.cameraShakeOffset = new THREE.Vector3();
+        this.quality = 1;
+        this.shared = {
+            sphere: new THREE.SphereGeometry(1, 14, 12),
+            plane: new THREE.PlaneGeometry(1, 1),
+            beam: new THREE.CylinderGeometry(1, 1, 1, 14, 1, true).rotateX(Math.PI / 2),
+            ring: new THREE.RingGeometry(0.72, 1, 28),
+            ink: new THREE.MeshBasicMaterial({ color: window.inkColor(0x14100c), side: THREE.BackSide }),
+            white: new THREE.MeshBasicMaterial({ color: 0xffffff }),
+        };
+        this.impactTexture = this.makeImpactTexture();
+        this.initParticles();
     }
 
-    disposeObject(obj) {
-        this.scene.remove(obj);
-        obj.traverse(o => {
-            if (o.geometry) o.geometry.dispose();
-            if (o.material) o.material.dispose();
+    makeImpactTexture() {
+        return window.canvasTexture(256, 256, (ctx, w) => {
+            const spikes = 11;
+            const star = (outer, inner, fill) => {
+                ctx.beginPath();
+                for (let i = 0; i < spikes * 2; i++) {
+                    const r = (i % 2 === 0 ? outer : inner) * w / 2 * (i % 4 === 0 ? 1 : 0.8);
+                    const a = (i / (spikes * 2)) * Math.PI * 2;
+                    ctx.lineTo(w / 2 + Math.cos(a) * r, w / 2 + Math.sin(a) * r);
+                }
+                ctx.closePath();
+                ctx.fillStyle = fill;
+                ctx.fill();
+            };
+            star(0.98, 0.5, '#14100c');
+            star(0.86, 0.42, '#ffffff');
         });
     }
 
-    removeProjectile(index) {
-        this.disposeObject(this.projectiles[index].mesh);
-        this.projectiles.splice(index, 1);
+    initParticles() {
+        const n = MAX_PARTICLES;
+        this.pPos = new Float32Array(n * 3);
+        this.pVel = new Float32Array(n * 3);
+        this.pColor = new Float32Array(n * 3);
+        this.pSize = new Float32Array(n);
+        this.pBase = new Float32Array(n);
+        this.pAlpha = new Float32Array(n);
+        this.pLife = new Float32Array(n);
+        this.pMax = new Float32Array(n);
+        this.pGrav = new Float32Array(n);
+        this.pNext = 0;
+
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.BufferAttribute(this.pPos, 3).setUsage(THREE.DynamicDrawUsage));
+        geo.setAttribute('aColor', new THREE.BufferAttribute(this.pColor, 3).setUsage(THREE.DynamicDrawUsage));
+        geo.setAttribute('aSize', new THREE.BufferAttribute(this.pSize, 1).setUsage(THREE.DynamicDrawUsage));
+        geo.setAttribute('aAlpha', new THREE.BufferAttribute(this.pAlpha, 1).setUsage(THREE.DynamicDrawUsage));
+
+        this.pointsMaterial = new THREE.ShaderMaterial({
+            vertexShader: PARTICLE_VERTEX,
+            fragmentShader: PARTICLE_FRAGMENT,
+            uniforms: { uScale: { value: 300 } },
+            transparent: true,
+            depthWrite: false,
+        });
+        this.points = new THREE.Points(geo, this.pointsMaterial);
+        this.points.frustumCulled = false;
+        this.scene.add(this.points);
     }
 
-    // Limpia todos los efectos: entre rondas no debe sobrevivir ningún disparo
-    clear() {
-        [...this.particles, ...this.shockwaves, ...this.projectiles, ...this.beams]
-            .forEach(item => this.disposeObject(item.mesh));
-        this.particles = [];
-        this.shockwaves = [];
-        this.projectiles = [];
-        this.beams = [];
-        this.screenShakeIntensity = 0;
-        this.cameraShakeOffset.set(0, 0, 0);
+    setViewportHeight(h) {
+        this.pointsMaterial.uniforms.uScale.value = h * 0.62;
     }
 
-    // Trigger screen shake
+    spawn(x, y, z, vx, vy, vz, colorHex, size, life, gravity) {
+        const i = this.pNext;
+        this.pNext = (i + 1) % MAX_PARTICLES;
+        this.pPos[i * 3] = x; this.pPos[i * 3 + 1] = y; this.pPos[i * 3 + 2] = z;
+        this.pVel[i * 3] = vx; this.pVel[i * 3 + 1] = vy; this.pVel[i * 3 + 2] = vz;
+        this.pColor[i * 3] = ((colorHex >> 16) & 255) / 255;
+        this.pColor[i * 3 + 1] = ((colorHex >> 8) & 255) / 255;
+        this.pColor[i * 3 + 2] = (colorHex & 255) / 255;
+        this.pBase[i] = size;
+        this.pLife[i] = life;
+        this.pMax[i] = life;
+        this.pGrav[i] = gravity;
+    }
+
+    // ─────────────────────────────────────────────
+    //  API DE EFECTOS
+    // ─────────────────────────────────────────────
     shake(amount = 0.4) {
         this.screenShakeIntensity = Math.max(this.screenShakeIntensity, amount);
         const gestured = !navigator.userActivation || navigator.userActivation.hasBeenActive;
-        if (navigator.vibrate && gestured) {
-            navigator.vibrate(Math.min(150, Math.floor(amount * 200)));
-        }
+        if (navigator.vibrate && gestured) navigator.vibrate(Math.min(150, Math.floor(amount * 200)));
     }
 
-    // Spark / Hit burst
     createHitSparks(position, color = 0xffe600, count = 18) {
-        for (let i = 0; i < count; i++) {
-            const geom = new THREE.SphereGeometry(0.08 + Math.random() * 0.08, 4, 4);
-            const mat = new THREE.MeshBasicMaterial({
-                color: color,
-                transparent: true,
-                opacity: 1
-            });
-            const p = new THREE.Mesh(geom, mat);
-            p.position.copy(position);
-
-            const speed = 4 + Math.random() * 7;
+        const n = Math.ceil(count * this.quality);
+        for (let i = 0; i < n; i++) {
+            const speed = 4 + Math.random() * 8;
             const theta = Math.random() * Math.PI * 2;
             const phi = (Math.random() - 0.5) * Math.PI;
-            const velocity = new THREE.Vector3(
+            this.spawn(position.x, position.y, position.z,
                 Math.cos(theta) * Math.cos(phi) * speed,
                 Math.sin(phi) * speed + 2,
-                Math.sin(theta) * Math.cos(phi) * speed
-            );
-
-            this.particles.push({
-                mesh: p,
-                velocity: velocity,
-                life: 0.25 + Math.random() * 0.2,
-                maxLife: 0.25 + Math.random() * 0.2,
-                gravity: -15
-            });
-            this.scene.add(p);
+                Math.sin(theta) * Math.cos(phi) * speed,
+                color, 0.28 + Math.random() * 0.3, 0.22 + Math.random() * 0.2, -14);
         }
-
-        // Add expanding shockwave ring
-        this.createShockwave(position, color, 2.5);
+        this.createImpact(position, count >= 20 ? 3.2 : 2.1);
     }
 
-    // Expanding shockwave ring
+    // Estrella de impacto: aparece de golpe, crece un poco y desaparece
+    createImpact(position, size = 2) {
+        const mat = new THREE.MeshBasicMaterial({
+            map: this.impactTexture, transparent: true, depthWrite: false, depthTest: false,
+        });
+        const mesh = new THREE.Mesh(this.shared.plane, mat);
+        mesh.position.copy(position);
+        mesh.renderOrder = 5;
+        this.scene.add(mesh);
+        this.bursts.push({ mesh, life: 0.16, maxLife: 0.16, size, billboard: true });
+    }
+
     createShockwave(position, color = 0xffffff, maxRadius = 3) {
-        const ringGeom = new THREE.RingGeometry(0.1, 0.35, 24);
-        const ringMat = new THREE.MeshBasicMaterial({
-            color: color,
-            side: THREE.DoubleSide,
-            transparent: true,
-            opacity: 0.9
+        const mat = new THREE.MeshBasicMaterial({
+            color, side: THREE.DoubleSide, transparent: true, opacity: 0.95, depthWrite: false,
         });
-        const ring = new THREE.Mesh(ringGeom, ringMat);
-        ring.position.copy(position);
-        ring.rotation.x = -Math.PI / 2;
-        this.scene.add(ring);
-
-        this.shockwaves.push({
-            mesh: ring,
-            radius: 0.2,
-            maxRadius: maxRadius,
-            life: 0.35,
-            maxLife: 0.35
-        });
+        const mesh = new THREE.Mesh(this.shared.ring, mat);
+        mesh.position.copy(position);
+        mesh.rotation.x = -Math.PI / 2;
+        this.scene.add(mesh);
+        this.bursts.push({ mesh, life: 0.32, maxLife: 0.32, size: maxRadius * 2 });
     }
 
-    // Aura burst when charging energy
     emitAura(position, colorHex = 0xffd700, count = 4) {
-        for (let i = 0; i < count; i++) {
-            const size = 0.12 + Math.random() * 0.18;
-            const geom = new THREE.TetrahedronGeometry(size, 0);
-            const mat = new THREE.MeshBasicMaterial({
-                color: colorHex,
-                transparent: true,
-                opacity: 0.85
-            });
-            const p = new THREE.Mesh(geom, mat);
-
+        const n = Math.max(1, Math.round(count * this.quality));
+        for (let i = 0; i < n; i++) {
             const angle = Math.random() * Math.PI * 2;
-            const radius = 0.5 + Math.random() * 0.6;
-            p.position.set(
+            const radius = 0.45 + Math.random() * 0.6;
+            this.spawn(
                 position.x + Math.cos(angle) * radius,
                 position.y + Math.random() * 0.4,
-                position.z + Math.sin(angle) * radius
-            );
-
-            const velocity = new THREE.Vector3(
-                (Math.random() - 0.5) * 1.5,
-                4.5 + Math.random() * 4.0,
-                (Math.random() - 0.5) * 1.5
-            );
-
-            this.particles.push({
-                mesh: p,
-                velocity: velocity,
-                life: 0.4 + Math.random() * 0.25,
-                maxLife: 0.4 + Math.random() * 0.25,
-                rotSpeed: (Math.random() - 0.5) * 15,
-                gravity: 2.0 // float upwards
-            });
-            this.scene.add(p);
+                position.z + Math.sin(angle) * radius,
+                -Math.cos(angle) * 0.6, 4.5 + Math.random() * 3.5, -Math.sin(angle) * 0.6,
+                colorHex, 0.3 + Math.random() * 0.34, 0.35 + Math.random() * 0.25, 1.5);
         }
     }
 
-    // Lightning bolt for Pikachu
-    emitLightning(startPos, endPos, color = 0x00f2ff) {
-        const points = [];
+    emitLightning(startPos, endPos, color = 0xfff176, life = 0.11) {
+        const points = [startPos.clone()];
         const steps = 6;
-        points.push(startPos.clone());
         for (let i = 1; i < steps; i++) {
-            const frac = i / steps;
-            const p = new THREE.Vector3().lerpVectors(startPos, endPos, frac);
+            const p = new THREE.Vector3().lerpVectors(startPos, endPos, i / steps);
             p.x += (Math.random() - 0.5) * 0.8;
             p.y += (Math.random() - 0.5) * 0.8;
             p.z += (Math.random() - 0.5) * 0.8;
             points.push(p);
         }
         points.push(endPos.clone());
-
-        const geom = new THREE.BufferGeometry().setFromPoints(points);
-        const mat = new THREE.LineBasicMaterial({
-            color: color,
-            linewidth: 3,
-            transparent: true,
-            opacity: 1
-        });
-        const line = new THREE.Line(geom, mat);
+        const line = new THREE.Line(
+            new THREE.BufferGeometry().setFromPoints(points),
+            new THREE.LineBasicMaterial({ color, transparent: true })
+        );
         this.scene.add(line);
-
-        this.shockwaves.push({
-            mesh: line,
-            life: 0.12,
-            maxLife: 0.12,
-            isLine: true
-        });
+        this.bolts.push({ mesh: line, life, maxLife: life });
     }
 
-    // Launch Ki Blast / Electro Ball projectile
     spawnProjectile(owner, startPos, direction, config = {}) {
         const speed = config.speed || 18;
         const color = config.color || 0x00d9ff;
         const size = config.size || 0.4;
-        const damage = config.damage || 14;
 
-        // Core energy sphere
         const group = new THREE.Group();
-        const coreGeom = new THREE.SphereGeometry(size, 16, 16);
-        const coreMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-        const core = new THREE.Mesh(coreGeom, coreMat);
+        const core = new THREE.Mesh(this.shared.sphere, this.shared.white);
+        core.scale.setScalar(size * 0.62);
         group.add(core);
-
-        // Glow shell
-        const glowGeom = new THREE.SphereGeometry(size * 1.5, 16, 16);
-        const glowMat = new THREE.MeshBasicMaterial({
-            color: color,
-            transparent: true,
-            opacity: 0.65
-        });
-        const glow = new THREE.Mesh(glowGeom, glowMat);
+        const glowMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9 });
+        const glow = new THREE.Mesh(this.shared.sphere, glowMat);
+        glow.scale.setScalar(size);
         group.add(glow);
+        const ink = new THREE.Mesh(this.shared.sphere, this.shared.ink);
+        ink.scale.setScalar(size * 1.16);
+        group.add(ink);
 
         group.position.copy(startPos);
         this.scene.add(group);
 
         const proj = {
-            owner: owner,
+            owner,
             mesh: group,
             velocity: direction.clone().normalize().multiplyScalar(speed),
-            damage: damage,
-            radius: size * 1.2,
+            damage: config.damage || 14,
+            radius: size * 1.1,
             life: 2.5,
-            color: color,
-            trailTimer: 0
+            color,
+            trailTimer: 0,
+            ownMaterial: glowMat,
         };
         this.projectiles.push(proj);
         return proj;
     }
 
-    // Spawn massive beam (Kamehameha / Mega Thunderbolt)
+    // kind: 'beam' (rayo), 'bolt' (rayo eléctrico irregular) o 'flame' (llamarada que se abre)
     spawnBeam(owner, startPos, direction, config = {}) {
         const length = config.length || 24;
         const radius = config.radius || 1.1;
         const color = config.color || 0x00bfff;
         const duration = config.duration || 1.4;
-        const damage = config.damage || 45;
+        const kind = config.kind || 'beam';
 
         const group = new THREE.Group();
+        const shellMat = new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide, transparent: true, opacity: 0.92 });
+        const coreMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide, transparent: true });
 
-        // Beam cylinder
-        const cylGeom = new THREE.CylinderGeometry(radius, radius, length, 16, 1, true);
-        cylGeom.rotateX(Math.PI / 2);
-        const cylMat = new THREE.MeshBasicMaterial({
-            color: color,
-            transparent: true,
-            opacity: 0.8,
-            side: THREE.DoubleSide
-        });
-        const cyl = new THREE.Mesh(cylGeom, cylMat);
-        cyl.position.set(0, 0, length / 2);
-        group.add(cyl);
+        const ink = new THREE.Mesh(this.shared.beam, this.shared.ink);
+        const shell = new THREE.Mesh(this.shared.beam, shellMat);
+        const core = new THREE.Mesh(this.shared.beam, coreMat);
+        const shapes = [ink, shell, core];
+        shapes.forEach(m => { m.position.z = length / 2; group.add(m); });
 
-        // Beam inner white core
-        const coreGeom = new THREE.CylinderGeometry(radius * 0.5, radius * 0.5, length, 16, 1, true);
-        coreGeom.rotateX(Math.PI / 2);
-        const coreMat = new THREE.MeshBasicMaterial({
-            color: 0xffffff,
-            transparent: true,
-            opacity: 0.95,
-            side: THREE.DoubleSide
-        });
-        const core = new THREE.Mesh(coreGeom, coreMat);
-        core.position.set(0, 0, length / 2);
-        group.add(core);
-
-        // Head glowing sphere
-        const headGeom = new THREE.SphereGeometry(radius * 1.6, 16, 16);
-        const headMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-        const head = new THREE.Mesh(headGeom, headMat);
-        head.position.set(0, 0, length);
-        group.add(head);
+        const head = new THREE.Mesh(this.shared.sphere, coreMat);
+        head.position.z = length;
+        head.scale.setScalar(radius * 1.25);
+        const muzzle = new THREE.Mesh(this.shared.sphere, shellMat);
+        muzzle.scale.setScalar(radius * 1.1);
+        group.add(head, muzzle);
 
         group.position.copy(startPos);
         group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), direction.clone().normalize());
-
         this.scene.add(group);
 
         const beam = {
-            owner: owner,
-            mesh: group,
-            cyl: cyl,
-            core: core,
+            owner, mesh: group, kind, ink, shell, core, head, muzzle,
+            ownMaterials: [shellMat, coreMat],
             startPos: startPos.clone(),
             direction: direction.clone().normalize(),
-            length: length,
-            radius: radius,
-            damage: damage,
-            duration: duration,
-            life: duration,
-            color: color
+            length, radius,
+            damage: config.damage || 45,
+            duration, life: duration, color,
+            grow: 0,
+            sparkTimer: 0,
         };
         this.beams.push(beam);
         this.shake(0.6);
+        this.createShockwave(new THREE.Vector3(startPos.x, 0.05, startPos.z), color, 5);
         return beam;
     }
 
-    update(dt) {
-        // 1. Update Particles
-        for (let i = this.particles.length - 1; i >= 0; i--) {
-            const p = this.particles[i];
-            p.life -= dt;
-            if (p.life <= 0) {
-                this.scene.remove(p.mesh);
-                p.mesh.geometry.dispose();
-                p.mesh.material.dispose();
-                this.particles.splice(i, 1);
+    // ─────────────────────────────────────────────
+    //  LIMPIEZA
+    // ─────────────────────────────────────────────
+    removeProjectile(index) {
+        const p = this.projectiles[index];
+        this.scene.remove(p.mesh);
+        p.ownMaterial.dispose();
+        this.projectiles.splice(index, 1);
+    }
+
+    removeBeam(index) {
+        const b = this.beams[index];
+        this.scene.remove(b.mesh);
+        b.ownMaterials.forEach(m => m.dispose());
+        this.beams.splice(index, 1);
+    }
+
+    removeBurst(list, index) {
+        const b = list[index];
+        this.scene.remove(b.mesh);
+        b.mesh.material.dispose();
+        if (b.mesh.geometry !== this.shared.plane && b.mesh.geometry !== this.shared.ring) b.mesh.geometry.dispose();
+        list.splice(index, 1);
+    }
+
+    // Limpia todos los efectos: entre rondas no debe sobrevivir ningún disparo
+    clear() {
+        while (this.projectiles.length) this.removeProjectile(0);
+        while (this.beams.length) this.removeBeam(0);
+        while (this.bursts.length) this.removeBurst(this.bursts, 0);
+        while (this.bolts.length) this.removeBurst(this.bolts, 0);
+        this.pLife.fill(0);
+        this.pAlpha.fill(0);
+        this.screenShakeIntensity = 0;
+        this.cameraShakeOffset.set(0, 0, 0);
+    }
+
+    // ─────────────────────────────────────────────
+    //  UPDATE
+    // ─────────────────────────────────────────────
+    update(dt, camera) {
+        // Partículas
+        for (let i = 0; i < MAX_PARTICLES; i++) {
+            if (this.pLife[i] <= 0) {
+                if (this.pAlpha[i] !== 0) { this.pAlpha[i] = 0; this.pSize[i] = 0; }
                 continue;
             }
-            p.velocity.y += (p.gravity || 0) * dt;
-            p.mesh.position.addScaledVector(p.velocity, dt);
-            if (p.rotSpeed) {
-                p.mesh.rotation.x += p.rotSpeed * dt;
-                p.mesh.rotation.y += p.rotSpeed * dt;
-            }
-            const progress = p.life / p.maxLife;
-            p.mesh.material.opacity = progress;
-            p.mesh.scale.setScalar(progress);
+            this.pLife[i] -= dt;
+            const k = i * 3;
+            this.pVel[k + 1] += this.pGrav[i] * dt;
+            this.pPos[k] += this.pVel[k] * dt;
+            this.pPos[k + 1] += this.pVel[k + 1] * dt;
+            this.pPos[k + 2] += this.pVel[k + 2] * dt;
+            const progress = Math.max(0, this.pLife[i] / this.pMax[i]);
+            this.pAlpha[i] = Math.min(1, progress * 2.2);
+            this.pSize[i] = this.pBase[i] * (0.35 + progress * 0.65);
+        }
+        const attrs = this.points.geometry.attributes;
+        attrs.position.needsUpdate = true;
+        attrs.aColor.needsUpdate = true;
+        attrs.aSize.needsUpdate = true;
+        attrs.aAlpha.needsUpdate = true;
+
+        // Estrellas de impacto y ondas
+        for (let i = this.bursts.length - 1; i >= 0; i--) {
+            const b = this.bursts[i];
+            b.life -= dt;
+            if (b.life <= 0) { this.removeBurst(this.bursts, i); continue; }
+            const progress = b.life / b.maxLife;
+            const eased = 1 - progress * progress;
+            b.mesh.scale.setScalar(b.size * (b.billboard ? 0.75 + eased * 0.25 : Math.max(0.05, eased)));
+            b.mesh.material.opacity = Math.min(1, progress * 2);
+            if (b.billboard && camera) b.mesh.quaternion.copy(camera.quaternion);
         }
 
-        // 2. Update Shockwaves
-        for (let i = this.shockwaves.length - 1; i >= 0; i--) {
-            const sw = this.shockwaves[i];
-            sw.life -= dt;
-            if (sw.life <= 0) {
-                this.scene.remove(sw.mesh);
-                sw.mesh.geometry.dispose();
-                sw.mesh.material.dispose();
-                this.shockwaves.splice(i, 1);
-                continue;
-            }
-            const progress = sw.life / sw.maxLife;
-            sw.mesh.material.opacity = progress;
-            if (!sw.isLine) {
-                const scale = (1 - progress) * sw.maxRadius;
-                sw.mesh.scale.set(scale, scale, scale);
-            }
+        // Relámpagos
+        for (let i = this.bolts.length - 1; i >= 0; i--) {
+            const b = this.bolts[i];
+            b.life -= dt;
+            if (b.life <= 0) { this.removeBurst(this.bolts, i); continue; }
+            b.mesh.material.opacity = b.life / b.maxLife;
         }
 
-        // 3. Update Projectiles
+        // Proyectiles
         for (let i = this.projectiles.length - 1; i >= 0; i--) {
             const proj = this.projectiles[i];
             proj.life -= dt;
-            if (proj.life <= 0) {
+            const pos = proj.mesh.position;
+            if (proj.life <= 0 || Math.abs(pos.x) > 16 || Math.abs(pos.z) > 11) {
                 this.removeProjectile(i);
                 continue;
             }
-            proj.mesh.position.addScaledVector(proj.velocity, dt);
-
-            // Emission of trail particles
+            pos.addScaledVector(proj.velocity, dt);
             proj.trailTimer += dt;
-            if (proj.trailTimer > 0.04) {
+            if (proj.trailTimer > 0.03) {
                 proj.trailTimer = 0;
-                this.emitAura(proj.mesh.position, proj.color, 2);
+                this.spawn(pos.x, pos.y, pos.z, (Math.random() - 0.5), (Math.random() - 0.5), (Math.random() - 0.5),
+                    proj.color, 0.34, 0.24, 0);
             }
         }
 
-        // 4. Update Beams
+        // Rayos
         for (let i = this.beams.length - 1; i >= 0; i--) {
             const beam = this.beams[i];
             beam.life -= dt;
-            if (beam.life <= 0) {
-                this.disposeObject(beam.mesh);
-                this.beams.splice(i, 1);
-                continue;
-            }
-            // Pulse size
-            const pulse = 1 + Math.sin(beam.life * 35) * 0.15;
-            beam.cyl.scale.set(pulse, pulse, 1);
-            beam.core.scale.set(pulse * 0.8, pulse * 0.8, 1);
-
-            // Beam fade near end
-            if (beam.life < 0.3) {
-                const alpha = beam.life / 0.3;
-                beam.cyl.material.opacity = 0.8 * alpha;
-                beam.core.material.opacity = 0.95 * alpha;
-            }
+            if (beam.life <= 0) { this.removeBeam(i); continue; }
+            this.updateBeam(beam, dt);
         }
 
-        // 5. Update Screen Shake
+        // Temblor de cámara
         if (this.screenShakeIntensity > 0.005) {
-            this.cameraShakeOffset.set(
-                (Math.random() - 0.5) * this.screenShakeIntensity,
-                (Math.random() - 0.5) * this.screenShakeIntensity,
-                (Math.random() - 0.5) * this.screenShakeIntensity
-            );
+            const s = this.screenShakeIntensity;
+            this.cameraShakeOffset.set((Math.random() - 0.5) * s, (Math.random() - 0.5) * s, (Math.random() - 0.5) * s);
             this.screenShakeIntensity *= Math.pow(this.screenShakeDecay, dt * 60);
         } else {
             this.cameraShakeOffset.set(0, 0, 0);
             this.screenShakeIntensity = 0;
         }
+    }
+
+    updateBeam(beam, dt) {
+        const { radius: r, length: L, kind } = beam;
+        // Sale disparado: en un instante recorre todo su largo
+        beam.grow = Math.min(1, beam.grow + dt * 11);
+        const len = L * beam.grow;
+        const fade = Math.min(1, beam.life / 0.22);
+        const pulse = 1 + Math.sin(beam.life * 42) * 0.09;
+
+        const setShape = (mesh, radiusScale) => {
+            const rad = r * radiusScale * pulse * fade;
+            mesh.scale.set(rad, rad, Math.max(0.01, len));
+            mesh.position.z = len / 2;
+        };
+
+        if (kind === 'flame') {
+            // La llamarada no es un tubo: son lenguas de fuego que se abren al avanzar
+            beam.ink.visible = false;
+            beam.shell.visible = false;
+            beam.core.visible = false;
+            beam.head.visible = false;
+            beam.sparkTimer += dt;
+            if (beam.sparkTimer > 0.012) {
+                beam.sparkTimer = 0;
+                const n = Math.ceil(5 * this.quality);
+                const d = beam.direction;
+                for (let k = 0; k < n; k++) {
+                    const spread = (Math.random() - 0.5) * 0.34;
+                    const vx = d.x + (-d.z) * spread;
+                    const vz = d.z + d.x * spread;
+                    const speed = L / 0.42;
+                    const hot = Math.random() < 0.3;
+                    this.spawn(beam.startPos.x, beam.startPos.y + (Math.random() - 0.5) * 0.4, beam.startPos.z,
+                        vx * speed, (Math.random() - 0.5) * 3 + 1, vz * speed,
+                        hot ? 0xffe680 : (Math.random() < 0.5 ? 0xff7a1a : 0xd93a0b),
+                        0.7 + Math.random() * 0.8, 0.42, 0);
+                }
+            }
+        } else {
+            const thin = kind === 'bolt' ? 0.5 : 1;
+            setShape(beam.ink, 1.12 * thin);
+            setShape(beam.shell, 1 * thin);
+            setShape(beam.core, 0.55 * thin);
+            beam.head.position.z = len;
+            beam.head.scale.setScalar(r * 1.2 * thin * pulse * fade);
+
+            beam.sparkTimer += dt;
+            if (kind === 'bolt' && beam.sparkTimer > 0.03) {
+                beam.sparkTimer = 0;
+                const d = beam.direction;
+                const reach = (off) => new THREE.Vector3(
+                    beam.startPos.x + d.x * off, beam.startPos.y, beam.startPos.z + d.z * off
+                );
+                for (let k = 0; k < 3; k++) {
+                    const a = Math.random() * len * 0.8;
+                    const b = reach(a + 2 + Math.random() * 3);
+                    b.y += (Math.random() - 0.5) * r * 2.4;
+                    b.x += (-d.z) * (Math.random() - 0.5) * r * 2.4;
+                    b.z += d.x * (Math.random() - 0.5) * r * 2.4;
+                    this.emitLightning(reach(a), b, beam.color, 0.07);
+                }
+            }
+        }
+        beam.muzzle.scale.setScalar(r * 1.05 * pulse * fade);
+        beam.ownMaterials[0].opacity = 0.92 * fade;
+        beam.ownMaterials[1].opacity = fade;
     }
 }
 

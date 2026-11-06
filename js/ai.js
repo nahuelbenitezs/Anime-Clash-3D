@@ -82,7 +82,11 @@ class FighterAI {
         const tooClose = dist < p.range - 1.2;
         const farAway = dist > p.range + 1.5;
 
-        if (inReach && Math.random() < p.aggression * this.level.aggression) { this.plan = 'combo'; this.planTimer = 0.9; return; }
+        if (inReach && Math.random() < p.aggression * this.level.aggression * (this.plan === 'combo' ? 0.35 : 1)) {
+            this.plan = 'combo';
+            this.planTimer = 0.75;
+            return;
+        }
         if (tooClose) { this.plan = 'retreat'; return; }
         if (farAway) {
             if (s.ki >= s.stats.blast.cost && roll < p.blastBias) { this.plan = 'shoot'; return; }

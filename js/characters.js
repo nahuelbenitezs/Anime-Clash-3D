@@ -467,9 +467,9 @@ class Fighter {
         this.hasGLB = false;
         this.glbModel = null;
         this.glbHolder = null;
-        this.mixer = null;
-        this.actions = {};
-        this.currentAction = null;
+        this.bodyOffset = { y: 0, z: 0, rx: 0, ry: 0, rz: 0 };
+        this.animClock = Math.random() * 10;
+        this.animStep = 0;
         this.tryLoadGLB();
     }
 
@@ -492,8 +492,20 @@ class Fighter {
 
         const model = data.scene;
 
-        // Escala y apoyo en el piso a partir de la malla ya deformada por los huesos:
-        // el bounding box común mira la geometría cruda y en estos modelos da otra escala.
+        // Pose base: un fotograma de cada clip queda fijo y el rig anima encima.
+        // El mixer no se vuelve a actualizar, lo que ahorra CPU en el celular.
+        const base = window.modelLoader.basePose[this.type];
+        if (base) {
+            const clip = data.animations.find(a => a.name === base.clip);
+            if (clip) {
+                this.baseMixer = new THREE.AnimationMixer(model);
+                this.baseMixer.clipAction(clip).play();
+                this.baseMixer.setTime(base.time);
+            }
+        }
+
+        // Escala y apoyo en el piso a partir de la malla ya deformada por los huesos y
+        // en la pose base: el bounding box común mira la geometría cruda y da otra escala.
         const box = window.modelLoader.skinnedBox(model);
         const size = box.getSize(new THREE.Vector3());
         const scale = this.stats.height / (size.y || 1);
@@ -510,37 +522,14 @@ class Fighter {
         this.hasGLB = true;
         this.glbModel = model;
 
-        // Setup Skeletal Animations
-        if (data.animations && data.animations.length > 0) {
-            this.mixer = new THREE.AnimationMixer(model);
-            data.animations.forEach(clip => {
-                this.actions[clip.name] = this.mixer.clipAction(clip);
-            });
-
-            if (this.type === 'goku') {
-                this.playGLBAction('02-STANCE', true);
-            }
+        // El clip de guardia de Goku lo deja de espaldas a +Z: se lo da vuelta para que
+        // las poses, escritas en ejes del personaje, valgan igual para todos.
+        if (base && base.flip) {
+            model.rotation.y = Math.PI;
+            model.position.x *= -1;
+            model.position.z *= -1;
         }
-    }
-
-    playGLBAction(name, loop = true, duration = 0.2) {
-        if (!this.actions || !this.actions[name]) return;
-        const next = this.actions[name];
-        if (this.currentAction === next) return;
-
-        next.reset();
-        if (!loop) {
-            next.setLoop(THREE.LoopOnce);
-            next.clampWhenFinished = true;
-        } else {
-            next.setLoop(THREE.LoopRepeat);
-        }
-
-        if (this.currentAction) {
-            this.currentAction.crossFadeTo(next, duration, true);
-        }
-        next.play();
-        this.currentAction = next;
+        this.rig = PoseRig.forModel(this.type, this.glbHolder);
     }
 
     mat(color) {
@@ -886,96 +875,9 @@ class Fighter {
     // 👑 VEGETA DETAILED 3D MODEL
     // =========================================================================
     buildVegeta() {
-        const skinMat = this.mat(0xffd1a9);
-        const blueSuit = this.mat(0x0c2560);
-        const armorWhite = this.mat(0xeeeeee);
-        const armorGold = this.mat(0xd4af37);
-        const blackHair = this.mat(0x111111);
-        const glovesBoots = this.mat(0xffffff);
-
-        const root = new THREE.Group();
-        this.group.add(root);
-        this.joints.root = root;
-
-        // Torso with Saiyan Battle Armor
-        const torsoGroup = new THREE.Group();
-        torsoGroup.position.y = 1.3;
-        root.add(torsoGroup);
-        this.joints.torso = torsoGroup;
-
-        // White Armor Chest Plate
-        const chest = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.55, 0.54), armorWhite);
-        chest.position.y = 0.2;
-        torsoGroup.add(chest);
-
-        // Gold Ribbed Abdomen Armor (Horizontal Grooves)
-        for (let i = 0; i < 3; i++) {
-            const rib = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.1, 0.56), armorGold);
-            rib.position.set(0, -0.15 - i * 0.12, 0);
-            torsoGroup.add(rib);
-        }
-
-        // Flexible Saiyan Shoulder Guards
-        [-0.52, 0.52].forEach(x => {
-            const guard = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.14, 0.55), armorGold);
-            guard.position.set(x, 0.44, 0);
-            torsoGroup.add(guard);
-        });
-
-        // Head with Vegeta's Fierce Scowl
-        const headGroup = new THREE.Group();
-        headGroup.position.set(0, 0.72, 0);
-        torsoGroup.add(headGroup);
-        this.joints.head = headGroup;
-
-        const headMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.22, 0.48, 10), skinMat);
-        headGroup.add(headMesh);
-
-        // HD Face Decal
-        const vegFaceTex = TextureGenerator.createVegetaFace();
-        const vegFaceMat = new THREE.MeshBasicMaterial({ map: vegFaceTex, transparent: true });
-        const facePlane = new THREE.Mesh(new THREE.PlaneGeometry(0.46, 0.46), vegFaceMat);
-        facePlane.position.set(0, 0, 0.25);
-        headGroup.add(facePlane);
-
-        // Vegeta's Signature Vertical Flame Hair with Widow's Peak
-        const hairGroup = new THREE.Group();
-        headGroup.add(hairGroup);
-
-        // Widow's peak forehead point
-        const peak = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.18, 4), blackHair);
-        peak.position.set(0, 0.24, 0.24);
-        peak.rotation.x = Math.PI;
-        hairGroup.add(peak);
-
-        // Massive upward flame spikes
-        const flameSpikes = [
-            { pos: [0, 0.7, 0], scale: [0.65, 1.1, 0.65], rot: [0, 0, 0] },
-            { pos: [-0.22, 0.85, 0], scale: [0.45, 1.0, 0.45], rot: [0, 0, 0.2] },
-            { pos: [0.22, 0.85, 0], scale: [0.45, 1.0, 0.45], rot: [0, 0, -0.2] },
-            { pos: [0, 1.05, -0.08], scale: [0.4, 0.9, 0.4], rot: [-0.15, 0, 0] },
-            { pos: [-0.36, 0.55, -0.05], scale: [0.35, 0.75, 0.35], rot: [0, 0, 0.4] },
-            { pos: [0.36, 0.55, -0.05], scale: [0.35, 0.75, 0.35], rot: [0, 0, -0.4] }
-        ];
-        flameSpikes.forEach(s => {
-            const cone = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.9, 5), blackHair);
-            cone.position.set(...s.pos);
-            cone.scale.set(...s.scale);
-            cone.rotation.set(...s.rot);
-            hairGroup.add(cone);
-        });
-
-        // Arms with White Combat Gloves
-        this.joints.leftArm = this.buildHumanLimb(torsoGroup, -0.55, 0.35, blueSuit, glovesBoots);
-        this.joints.rightArm = this.buildHumanLimb(torsoGroup, 0.55, 0.35, blueSuit, glovesBoots);
-
-        // Legs with Blue Suit & White Boots with Gold Tips
-        this.joints.leftLeg = this.buildGokuLeg(root, -0.24, blueSuit, glovesBoots, armorGold, armorGold);
-        this.joints.rightLeg = this.buildGokuLeg(root, 0.24, blueSuit, glovesBoots, armorGold, armorGold);
+        this.rig = window.buildVegetaModel(this);
     }
 
-    // =========================================================================
-    // 🔥 CHARIZARD DETAILED 3D MODEL
     // =========================================================================
     buildCharizard() {
         const orangeMat = this.mat(0xee6611);
@@ -1173,11 +1075,6 @@ class Fighter {
 
         this.state = state;
         this.stateTimer = 0;
-
-        if (this.hasGLB && this.type === 'goku') {
-            if (state === 'ultimate') this.playGLBAction('03-KAMEHAMEHA', false, 0.1);
-            else if (state === 'idle' || state === 'run') this.playGLBAction('02-STANCE', true, 0.2);
-        }
     }
 
     setChargingSound(on) {
@@ -1216,8 +1113,9 @@ class Fighter {
         if (this.comboWindow <= 0) this.comboStep = 0;
         const step = this.comboStep;
         this.comboStep = (step + 1) % 3;
+        this.animStep = step;
         this.comboWindow = 0.7;
-        this.attackCd = step === 2 ? 0.55 : 0.3;
+        this.attackCd = (step === 2 ? 0.55 : 0.3) / this.stats.attackRate;
         this.pendingHit = { t: 0.1, step, target };
 
         // Pequeño avance hacia el rival para que el golpe se sienta con peso
@@ -1237,7 +1135,7 @@ class Fighter {
         if (dist > this.stats.reach || target.isDead) return;
 
         const heavy = step === 2;
-        const damage = [7, 9, 14][step] * this.stats.power;
+        const damage = [5, 6, 10][step] * this.stats.power;
         const dealt = target.receiveHit({ amount: damage, attacker: this, heavy, kind: 'melee' });
         if (dealt <= 0) return;
 
@@ -1303,7 +1201,7 @@ class Fighter {
         if (len < 0.001) { mx = this.isPlayer ? -1 : 1; mz = 0; len = 1; }
 
         this.dashDir.set(mx / len, 0, mz / len);
-        this.dashCd = 0.85;
+        this.dashCd = this.stats.dashCooldown;
         this.dashInvuln = 0.2;
         this.setAnimation('dash');
         window.soundManager.playDash();
@@ -1433,7 +1331,7 @@ class Fighter {
                 start.y = this.stats.muzzleY;
                 this.pendingUlt = null;
                 this.vfx.spawnBeam(this, start, dir, {
-                    color: u.color, damage: u.damage, length: u.length, duration: u.duration, radius: u.radius,
+                    color: u.color, damage: u.damage, length: u.length, duration: u.duration, radius: u.radius, kind: u.kind,
                 });
                 window.soundManager.playExplosion();
             }
@@ -1504,13 +1402,28 @@ class Fighter {
         else if (this.state === 'hurt' && t > this.hurtDuration) this.setAnimation('idle');
         else if (this.state === 'dash' && t > 0.22) this.setAnimation('idle');
 
-        if (this.mixer) this.mixer.update(dt);
+        this.updatePose(dt);
+    }
 
-        if (this.hasGLB) {
-            if (this.isDead) this.glbHolder.rotation.x += (-Math.PI / 2 - this.glbHolder.rotation.x) * Math.min(1, dt * 8);
-        } else {
-            this.applyProceduralAnimation(dt);
-        }
+    updatePose(dt) {
+        this.animClock += dt;
+        if (!this.rig) { this.applyProceduralAnimation(dt); return; }
+
+        const { pose, body } = POSE_FN[this.type](this, this.stateTimer, this.animClock);
+        const blend = 1 - Math.exp(-(POSE_RATE[this.state] || 10) * dt);
+        this.rig.apply(pose, blend);
+
+        // El giro completo del coletazo no se suaviza: tiene que dar la vuelta entera
+        const b = this.bodyOffset;
+        b.y += (body.y - b.y) * blend;
+        b.z += (body.z - b.z) * blend;
+        b.rx += (body.rx - b.rx) * blend;
+        b.ry = body.ry;
+        b.rz += (body.rz - b.rz) * blend;
+        const holder = this.glbHolder || this.joints.root;
+        holder.position.y = b.y;
+        holder.position.z = b.z;
+        holder.rotation.set(b.rx, b.ry, b.rz);
     }
 
     applyProceduralAnimation(dt) {

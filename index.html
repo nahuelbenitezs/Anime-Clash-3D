@@ -5,10 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="theme-color" content="#000">
+    <meta name="theme-color" content="#14100c">
+    <meta name="description" content="Anime Clash 3D: juego de peleas 3D para el navegador, hecho para jugar en el celular. Proyecto de fans.">
     <title>Anime Clash 3D</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Bangers&family=Rajdhani:wght@600;700;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Bangers&family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/style.css">
     <!-- Three.js + Loaders -->
     <script src="vendor/three.min.js"></script>
@@ -18,238 +19,169 @@
 </head>
 <body>
 
+<!-- Iconos dibujados: reemplazan a los emoji, que cambian según el teléfono -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+        <symbol id="i-fist" viewBox="0 0 32 32"><path d="M8 13c0-2 1.5-3 3-3 .5-2 3-2.600 4-1 1-1.600 3.600-1.400 4 .5 1.700-1 4 .1 4 2.200V19c0 4.500-3 7-7 7h-2c-3.500 0-6-2.500-6-6v-7z"/><path d="M8 16c3-1.200 7-.8 8 2" fill="none" stroke="#14100c" stroke-width="2"/></symbol>
+        <symbol id="i-bolt" viewBox="0 0 32 32"><path d="M19 3 7 18h7l-2 11 13-16h-8z"/></symbol>
+        <symbol id="i-flame" viewBox="0 0 32 32"><path d="M16 3c1 6 8 8 8 16a8 8 0 0 1-16 0c0-4 2-5.500 3-9 1.500 1 2.500 2.500 2.500 4.500C15.500 12 16.500 7.500 16 3z"/></symbol>
+        <symbol id="i-star" viewBox="0 0 32 32"><path d="m16 1 3.200 9.500L27 5l-3.500 8.500L31 16l-7.500 2.500L27 27l-7.800-5.500L16 31l-3.200-9.500L5 27l3.500-8.500L1 16l7.500-2.500L5 5l7.800 5.500z"/></symbol>
+        <symbol id="i-dash" viewBox="0 0 32 32"><path d="M3 8h13l-3 4H3zM6 15h17l-3 4H6zM3 22h11l-3 4H3zM20 7l9 9-9 9 3-9z"/></symbol>
+        <symbol id="i-shield" viewBox="0 0 32 32"><path d="M16 2 28 6v9c0 7-5 12-12 15C9 27 4 22 4 15V6z"/></symbol>
+        <symbol id="i-sound" viewBox="0 0 32 32"><path d="M4 12h6l8-7v22l-8-7H4z"/><path d="M22 11c2.500 3 2.500 7 0 10M26 7c4.500 5 4.500 13 0 18" fill="none" stroke="currentColor" stroke-width="2.500"/></symbol>
+        <symbol id="i-mute" viewBox="0 0 32 32"><path d="M4 12h6l8-7v22l-8-7H4z"/><path d="m22 12 7 8m0-8-7 8" fill="none" stroke="currentColor" stroke-width="2.500"/></symbol>
+        <symbol id="i-full" viewBox="0 0 32 32"><path d="M4 12V4h8M28 12V4h-8M4 20v8h8M28 20v8h-8" fill="none" stroke="currentColor" stroke-width="3"/></symbol>
+        <symbol id="i-pause" viewBox="0 0 32 32"><path d="M8 5h6v22H8zM18 5h6v22h-6z"/></symbol>
+    </defs>
+</svg>
+
 <!-- ═══════════════ CANVAS ═══════════════ -->
 <div id="canvas-container"></div>
 
 <!-- ═══════════════ LOADING SCREEN ═══════════════ -->
 <div id="loading-screen">
-    <div class="load-logo">ANIME CLASH 3D</div>
-    <div class="load-sub">JUEGO DE PELEAS</div>
+    <div class="logo">ANIME CLASH <span>3D</span></div>
     <div class="load-bar-wrap"><div id="load-bar"></div></div>
     <div id="load-text">Cargando...</div>
 </div>
 
 <!-- ═══════════════ TITLE / MENU SCREEN ═══════════════ -->
-<div id="title-screen" class="overlay hidden">
-    <div class="title-glow">ANIME CLASH 3D</div>
-    <div class="title-sub">JUEGO DE PELEAS</div>
-    <button id="btn-play" class="big-btn pulse">▶ JUGAR</button>
-    <div class="title-hint">1 jugador contra la CPU</div>
-    <div class="title-legal">Proyecto de fans sin fines de lucro. No es un producto oficial. Los personajes pertenecen a sus dueños.</div>
+<div id="title-screen" class="overlay title-layout hidden">
+    <div class="title-art" aria-hidden="true"></div>
+    <div class="title-block">
+        <h1 class="logo">ANIME CLASH <span>3D</span></h1>
+        <p class="title-hint">Juego de peleas. Vos contra la CPU, al mejor de tres rondas.</p>
+        <button id="btn-play" class="ink-btn primary">JUGAR</button>
+        <p class="title-legal">Proyecto de fans sin fines de lucro. No es un producto oficial. Los personajes pertenecen a sus dueños.</p>
+    </div>
 </div>
 
 <!-- ═══════════════ SELECTION SCREEN ═══════════════ -->
 <div id="selection-screen" class="overlay hidden">
-    <div class="sel-header">ELEGÍ TU LUCHADOR</div>
-    <div class="sel-columns">
-
-        <!-- Player -->
-        <div class="sel-col">
-            <div class="sel-col-title p1-col">⚔ VOS (P1)</div>
-            <div class="char-roster" id="roster-p1">
-                <div class="char-tile selected" data-char="goku">
-                    <div class="tile-icon">🥋</div>
-                    <div class="tile-name">GOKU</div>
-                    <div class="tile-stats">
-                        <span class="stat-bar" style="--pct:90%">ATK</span>
-                        <span class="stat-bar" style="--pct:80%">DEF</span>
-                        <span class="stat-bar" style="--pct:75%">VEL</span>
-                    </div>
-                    <div class="tile-sig">Kamehameha</div>
-                </div>
-                <div class="char-tile" data-char="vegeta">
-                    <div class="tile-icon">👑</div>
-                    <div class="tile-name">VEGETA</div>
-                    <div class="tile-stats">
-                        <span class="stat-bar" style="--pct:95%">ATK</span>
-                        <span class="stat-bar" style="--pct:85%">DEF</span>
-                        <span class="stat-bar" style="--pct:70%">VEL</span>
-                    </div>
-                    <div class="tile-sig">Final Flash</div>
-                </div>
-                <div class="char-tile" data-char="pikachu">
-                    <div class="tile-icon">⚡</div>
-                    <div class="tile-name">PIKACHU</div>
-                    <div class="tile-stats">
-                        <span class="stat-bar" style="--pct:70%">ATK</span>
-                        <span class="stat-bar" style="--pct:55%">DEF</span>
-                        <span class="stat-bar" style="--pct:98%">VEL</span>
-                    </div>
-                    <div class="tile-sig">Impactrueno</div>
-                </div>
-                <div class="char-tile" data-char="charizard">
-                    <div class="tile-icon">🔥</div>
-                    <div class="tile-name">CHARIZARD</div>
-                    <div class="tile-stats">
-                        <span class="stat-bar" style="--pct:88%">ATK</span>
-                        <span class="stat-bar" style="--pct:78%">DEF</span>
-                        <span class="stat-bar" style="--pct:82%">VEL</span>
-                    </div>
-                    <div class="tile-sig">Lanzallamas</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- CPU -->
-        <div class="sel-col">
-            <div class="sel-col-title p2-col">🤖 CPU (P2)</div>
-            <div class="char-roster" id="roster-p2">
-                <div class="char-tile" data-char="goku">
-                    <div class="tile-icon">🥋</div>
-                    <div class="tile-name">GOKU</div>
-                    <div class="tile-stats">
-                        <span class="stat-bar" style="--pct:90%">ATK</span>
-                        <span class="stat-bar" style="--pct:80%">DEF</span>
-                        <span class="stat-bar" style="--pct:75%">VEL</span>
-                    </div>
-                    <div class="tile-sig">Kamehameha</div>
-                </div>
-                <div class="char-tile" data-char="vegeta">
-                    <div class="tile-icon">👑</div>
-                    <div class="tile-name">VEGETA</div>
-                    <div class="tile-stats">
-                        <span class="stat-bar" style="--pct:95%">ATK</span>
-                        <span class="stat-bar" style="--pct:85%">DEF</span>
-                        <span class="stat-bar" style="--pct:70%">VEL</span>
-                    </div>
-                    <div class="tile-sig">Final Flash</div>
-                </div>
-                <div class="char-tile selected" data-char="pikachu">
-                    <div class="tile-icon">⚡</div>
-                    <div class="tile-name">PIKACHU</div>
-                    <div class="tile-stats">
-                        <span class="stat-bar" style="--pct:70%">ATK</span>
-                        <span class="stat-bar" style="--pct:55%">DEF</span>
-                        <span class="stat-bar" style="--pct:98%">VEL</span>
-                    </div>
-                    <div class="tile-sig">Impactrueno</div>
-                </div>
-                <div class="char-tile" data-char="charizard">
-                    <div class="tile-icon">🔥</div>
-                    <div class="tile-name">CHARIZARD</div>
-                    <div class="tile-stats">
-                        <span class="stat-bar" style="--pct:88%">ATK</span>
-                        <span class="stat-bar" style="--pct:78%">DEF</span>
-                        <span class="stat-bar" style="--pct:82%">VEL</span>
-                    </div>
-                    <div class="tile-sig">Lanzallamas</div>
-                </div>
-            </div>
-        </div>
+    <div class="sel-grid">
+        <section class="sel-col">
+            <h2 class="sel-title">VOS</h2>
+            <div class="char-roster" id="roster-p1"></div>
+        </section>
+        <div class="sel-vs" aria-hidden="true">VS</div>
+        <section class="sel-col">
+            <h2 class="sel-title">CPU</h2>
+            <div class="char-roster" id="roster-p2"></div>
+        </section>
     </div>
-
     <div class="sel-footer">
-        <button id="btn-start-fight" class="big-btn">⚡ ¡A LUCHAR!</button>
-        <p class="pc-hint">📱 Celular: Joystick táctil &amp; botones | 💻 PC: WASD + J/K/L/U/I/Espacio</p>
+        <div class="difficulty" role="radiogroup" aria-label="Dificultad de la CPU">
+            <button class="diff-btn" data-level="easy" role="radio">FÁCIL</button>
+            <button class="diff-btn selected" data-level="normal" role="radio">NORMAL</button>
+            <button class="diff-btn" data-level="hard" role="radio">DIFÍCIL</button>
+        </div>
+        <button id="btn-start-fight" class="ink-btn primary">A PELEAR</button>
+        <p class="pc-hint desktop-only"><kbd>WASD</kbd> mover <kbd>J</kbd> golpe <kbd>K</kbd> ráfaga <kbd>L</kbd> cargar <kbd>U</kbd> definitivo <kbd>I</kbd> guardia <kbd>Espacio</kbd> esquivar</p>
     </div>
 </div>
 
 <!-- ═══════════════ BATTLE HUD ═══════════════ -->
 <div id="hud" class="hidden">
-    <!-- P1 -->
     <div class="hud-side hud-p1">
-        <div class="hud-name" id="p1-name">GOKU</div>
-        <div class="hp-wrap">
-            <div class="hp-track"><div id="p1-hp" class="hp-fill hp-fill-p1"></div></div>
+        <div class="hud-avatar" id="p1-avatar"></div>
+        <div class="hud-bars">
+            <div class="hud-name-row"><span class="hud-name" id="p1-name">GOKU</span><span class="round-pips" id="p1-pips"><i></i><i></i></span></div>
+            <div class="hp-track"><div class="hp-lag" id="p1-hp-lag"></div><div id="p1-hp" class="hp-fill"></div></div>
+            <div class="ki-track"><div id="p1-ki" class="ki-fill"></div><div class="ki-mark" id="p1-ki-mark"></div></div>
         </div>
-        <div class="ki-wrap">
-            <div class="ki-track"><div id="p1-ki" class="ki-fill"></div></div>
-            <span class="ki-label">KI</span>
-        </div>
-        <div id="p1-combo" class="combo-counter hidden">COMBO <span id="p1-combo-num">2</span>x</div>
+        <div id="p1-combo" class="combo-counter hidden"><span id="p1-combo-num">2</span> GOLPES</div>
     </div>
 
-    <!-- Timer + Round -->
     <div class="hud-center">
-        <div id="round-label">RONDA 1</div>
         <div id="battle-timer">60</div>
+        <div id="round-label">RONDA 1</div>
     </div>
 
-    <!-- P2 -->
     <div class="hud-side hud-p2">
-        <div class="hud-name" id="p2-name">PIKACHU</div>
-        <div class="hp-wrap hp-wrap-r">
-            <div class="hp-track"><div id="p2-hp" class="hp-fill hp-fill-p2"></div></div>
-        </div>
-        <div class="ki-wrap">
-            <span class="ki-label">KI</span>
-            <div class="ki-track"><div id="p2-ki" class="ki-fill"></div></div>
+        <div class="hud-avatar" id="p2-avatar"></div>
+        <div class="hud-bars">
+            <div class="hud-name-row"><span class="hud-name" id="p2-name">PIKACHU</span><span class="round-pips" id="p2-pips"><i></i><i></i></span></div>
+            <div class="hp-track"><div class="hp-lag" id="p2-hp-lag"></div><div id="p2-hp" class="hp-fill"></div></div>
+            <div class="ki-track"><div id="p2-ki" class="ki-fill"></div><div class="ki-mark" id="p2-ki-mark"></div></div>
         </div>
     </div>
 </div>
 
-<!-- Announcer text -->
+<!-- Anuncios de la pelea -->
 <div id="announcer" class="hidden"></div>
 
-<!-- Damage flash overlay -->
+<!-- Viñeta del definitivo -->
+<div id="cutin" class="hidden" aria-hidden="true">
+    <div class="cutin-lines"></div>
+    <div class="cutin-band">
+        <div class="cutin-portrait" id="cutin-portrait"></div>
+        <div class="cutin-name" id="cutin-name"></div>
+    </div>
+</div>
+
+<!-- Golpe recibido -->
 <div id="damage-flash"></div>
 
 <!-- ═══════════════ TOUCH CONTROLS ═══════════════ -->
 <div id="touch-controls" class="hidden">
     <div id="joystick-zone"><div id="joystick-knob"></div></div>
     <div id="action-cluster">
-        <button id="btn-ultimate" class="action-btn btn-ultimate" data-action="ultimate">
-            <span class="btn-icon">💥</span><span class="btn-lbl">ULTIMATE</span>
-        </button>
-        <button id="btn-blast" class="action-btn btn-blast" data-action="blast">
-            <span class="btn-icon">⚡</span><span class="btn-lbl">BLAST</span>
-        </button>
-        <button id="btn-attack" class="action-btn btn-attack" data-action="attack">
-            <span class="btn-icon">👊</span><span class="btn-lbl">GOLPE</span>
-        </button>
-        <button id="btn-dash" class="action-btn btn-dash" data-action="dash">
-            <span class="btn-icon">💨</span><span class="btn-lbl">DASH</span>
-        </button>
-        <button id="btn-guard" class="action-btn btn-guard" data-action="guard">
-            <span class="btn-icon">🛡️</span><span class="btn-lbl">GUARDIA</span>
-        </button>
-        <button id="btn-charge" class="action-btn btn-charge" data-action="charge">
-            <span class="btn-icon">🔥</span><span class="btn-lbl">CARGA</span>
-        </button>
+        <button id="btn-ultimate" class="action-btn btn-ultimate" aria-label="Definitivo"><svg><use href="#i-star"/></svg></button>
+        <button id="btn-blast" class="action-btn btn-blast" aria-label="Ráfaga"><svg><use href="#i-bolt"/></svg></button>
+        <button id="btn-attack" class="action-btn btn-attack" aria-label="Golpe"><svg><use href="#i-fist"/></svg></button>
+        <button id="btn-dash" class="action-btn btn-dash" aria-label="Esquivar"><svg><use href="#i-dash"/></svg></button>
+        <button id="btn-guard" class="action-btn btn-guard" aria-label="Guardia"><svg><use href="#i-shield"/></svg></button>
+        <button id="btn-charge" class="action-btn btn-charge" aria-label="Cargar ki"><svg><use href="#i-flame"/></svg></button>
     </div>
 </div>
 
 <!-- ═══════════════ UTILITY BUTTONS ═══════════════ -->
 <div id="util-bar">
-    <button id="btn-sound" class="util-btn">🔊</button>
-    <button id="btn-fs" class="util-btn">⛶</button>
-    <button id="btn-pause" class="util-btn hidden">⏸</button>
+    <button id="btn-sound" class="util-btn" aria-label="Sonido"><svg><use href="#i-sound"/></svg></button>
+    <button id="btn-fs" class="util-btn" aria-label="Pantalla completa"><svg><use href="#i-full"/></svg></button>
+    <button id="btn-pause" class="util-btn hidden" aria-label="Pausa"><svg><use href="#i-pause"/></svg></button>
 </div>
 
 <!-- ═══════════════ PAUSE MENU ═══════════════ -->
 <div id="pause-screen" class="overlay hidden">
-    <div class="pause-card">
-        <div class="pause-title">PAUSA</div>
-        <button id="btn-resume" class="big-btn">▶ Continuar</button>
-        <button id="btn-quit-match" class="sec-btn">🏠 Menú</button>
+    <div class="paper-card">
+        <h2 class="card-title">PAUSA</h2>
+        <button id="btn-resume" class="ink-btn primary">CONTINUAR</button>
+        <button id="btn-quit-match" class="ink-btn">SALIR AL MENÚ</button>
     </div>
 </div>
 
 <!-- ═══════════════ GAME OVER ═══════════════ -->
 <div id="gameover-screen" class="overlay hidden">
-    <div class="go-card">
-        <div id="go-title"></div>
-        <div id="go-sub"></div>
-        <div class="go-stats" id="go-stats"></div>
-        <div class="go-btns">
-            <button id="btn-rematch" class="big-btn">🔁 REVANCHA</button>
-            <button id="btn-back-sel" class="sec-btn">👥 LUCHADORES</button>
+    <div class="paper-card go-card">
+        <div class="go-portrait" id="go-portrait"></div>
+        <div class="go-body">
+            <h2 id="go-title" class="card-title"></h2>
+            <p id="go-sub"></p>
+            <div class="go-stats" id="go-stats"></div>
+            <div class="go-btns">
+                <button id="btn-rematch" class="ink-btn primary">REVANCHA</button>
+                <button id="btn-back-sel" class="ink-btn">CAMBIAR LUCHADOR</button>
+            </div>
         </div>
     </div>
 </div>
 
 <!-- ═══════════════ ORIENTATION ═══════════════ -->
-<div id="rotate-warn" class="hidden">🔄 Girá el celular para jugar mejor</div>
+<div id="rotate-warn" class="hidden">Girá el celular para jugar mejor</div>
 
 <!-- ═══════════════ SCRIPTS ═══════════════ -->
 <script src="js/audio.js"></script>
-<script src="js/vfx.js"></script>
-<script src="js/arena.js"></script>
 <script src="js/model_loader.js"></script>
+<script src="js/arena.js"></script>
+<script src="js/vfx.js"></script>
 <script src="js/roster.js"></script>
+<script src="js/rig.js"></script>
+<script src="js/vegeta.js"></script>
 <script src="js/characters.js"></script>
 <script src="js/ai.js"></script>
 <script src="js/controls.js"></script>
+<script src="js/portraits.js"></script>
 <script src="js/game.js"></script>
 <script src="js/main.js"></script>
 </body>

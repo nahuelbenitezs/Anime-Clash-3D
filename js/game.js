@@ -63,8 +63,7 @@ class Game {
     // ─────────────────────────────────────────────
     initThree() {
         this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(0x6aafd8);
-        this.scene.fog = new THREE.FogExp2(0x6aafd8, 0.018);
+        this.scene.fog = new THREE.Fog(ARENA_COLORS.fog, 28, 90);
 
         const w = window.innerWidth, h = window.innerHeight;
         this.camera = new THREE.PerspectiveCamera(50, w / h, 0.1, 180);
@@ -76,19 +75,20 @@ class Game {
             stencil: false
         });
         this.renderer.setSize(w, h);
-        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        this.pixelRatio = Math.min(window.devicePixelRatio, 2);
+        this.renderer.setPixelRatio(this.pixelRatio);
         this.renderer.shadowMap.enabled = true;
-        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        this.renderer.shadowMap.type = THREE.PCFShadowMap;
         this.renderer.outputEncoding = THREE.sRGBEncoding;
         this.container.appendChild(this.renderer.domElement);
 
-        const hemi = new THREE.HemisphereLight(0xb0d8ff, 0x553311, 0.6);
+        const hemi = new THREE.HemisphereLight(0xffe2bd, 0x5c3a2c, 0.72);
         this.scene.add(hemi);
 
-        const sun = new THREE.DirectionalLight(0xfff5e0, 1.05);
-        sun.position.set(10, 22, 12);
+        const sun = new THREE.DirectionalLight(0xffe0b0, 1.0);
+        sun.position.set(-11, 18, 10);
         sun.castShadow = true;
-        sun.shadow.mapSize.setScalar(2048);
+        sun.shadow.mapSize.setScalar(1024);
         sun.shadow.camera.left = -20;
         sun.shadow.camera.right = 20;
         sun.shadow.camera.top = 20;
@@ -98,9 +98,7 @@ class Game {
         sun.shadow.bias = -0.001;
         this.scene.add(sun);
 
-        const rim = new THREE.DirectionalLight(0x3366ff, 0.4);
-        rim.position.set(-8, 10, -12);
-        this.scene.add(rim);
+        this.sun = sun;
 
         this.vfx = new VFXManager(this.scene);
         this.arena = new Arena(this.scene);
@@ -108,6 +106,10 @@ class Game {
 
         this.camTarget = new THREE.Vector3(0, 5.5, 17);
         this.camLookAt = new THREE.Vector3(0, 1.4, 0);
+        this.vfx.setViewportHeight(h * this.pixelRatio);
+
+        // Control de rendimiento: si el celular no llega, se baja la calidad sola
+        this.perf = { frames: 0, time: 0, level: 0 };
 
         window.addEventListener('resize', () => this.onResize());
     }
@@ -116,6 +118,56 @@ class Game {
         this.camera.aspect = window.innerWidth / window.innerHeight;
         this.camera.updateProjectionMatrix();
         this.renderer.setSize(window.innerWidth, window.innerHeight);
+        this.vfx.setViewportHeight(window.innerHeight * this.renderer.getPixelRatio());
+    }
+
+    // Mide el promedio de cuadros y baja resolución, sombras y partículas por etapas.
+    watchPerformance(dt) {
+        const perf = this.perf;
+        perf.frames++;
+        perf.time += dt;
+        if (perf.time < 2.5) return;
+        const fps = perf.frames / perf.time;
+        perf.frames = 0;
+        perf.time = 0;
+        perf.fps = fps;
+        if (fps >= 42 || perf.level >= 3) return;
+
+        perf.level++;
+        if (perf.level === 1) {
+            this.pixelRatio = Math.min(this.pixelRatio, 1.25);
+            this.renderer.setPixelRatio(this.pixelRatio);
+            this.vfx.quality = 0.7;
+        } else if (perf.level === 2) {
+            this.sun.castShadow = false;
+            this.renderer.shadowMap.enabled = false;
+            this.vfx.quality = 0.5;
+        } else {
+            this.pixelRatio = 1;
+            this.renderer.setPixelRatio(1);
+        }
+        this.onResize();
+    }
+
+    // Antes de elegir luchador, los cuatro quedan posando detrás del título.
+    showTitleBackdrop() {
+        this.clearBackdrop();
+        const types = Object.keys(FIGHTER_STATS);
+        this.backdrop = types.map((type, i) => {
+            const f = new Fighter(type, true, this.scene, this.vfx, {});
+            f.position.set(-0.6 + i * 2.6, 0, -1 + (i % 2) * 1.2);
+            f.group.position.copy(f.position);
+            f.group.rotation.y = -0.25;
+            f.rotationY = f.targetRotationY = -0.25;
+            return f;
+        });
+        this.camera.position.set(1.6, 2.5, 10.5);
+        this.camera.lookAt(1.6, 1.4, 0);
+    }
+
+    clearBackdrop() {
+        if (this.backdrop) this.backdrop.forEach(f => f.dispose());
+        this.backdrop = null;
     }
 
     // ─────────────────────────────────────────────
@@ -127,6 +179,8 @@ class Game {
         this.p1NameEl = document.getElementById('p1-name');
         this.p2HP  = document.getElementById('p2-hp');
         this.p2Ki  = document.getElementById('p2-ki');
+        this.p1HPLag = document.getElementById('p1-hp-lag');
+        this.p2HPLag = document.getElementById('p2-hp-lag');
         this.p2NameEl = document.getElementById('p2-name');
         this.announcerEl = document.getElementById('announcer');
         this.btnUltimate = document.getElementById('btn-ultimate');
@@ -143,7 +197,7 @@ class Game {
         soundBtn && soundBtn.addEventListener('click', () => {
             window.soundManager.init();
             const muted = window.soundManager.toggleMute();
-            soundBtn.textContent = muted ? '🔇' : '🔊';
+            soundBtn.querySelector('use').setAttribute('href', muted ? '#i-mute' : '#i-sound');
             if (!muted && ['countdown', 'fighting'].includes(this.state)) window.soundManager.startMusic();
         });
 
@@ -185,6 +239,7 @@ class Game {
         this.round = 1;
         this.roundWins = { player: 0, cpu: 0 };
         this.resetStats();
+        this.clearBackdrop();
 
         window.soundManager.init();
         window.soundManager.startMusic();
@@ -195,6 +250,13 @@ class Game {
 
         this.p1NameEl.textContent = FIGHTER_STATS[playerType].label;
         this.p2NameEl.textContent = FIGHTER_STATS[enemyType].label;
+        if (window.portraits) {
+            document.getElementById('p1-avatar').style.backgroundImage = `url(${window.portraits[playerType]})`;
+            document.getElementById('p2-avatar').style.backgroundImage = `url(${window.portraits[enemyType]})`;
+        }
+        // La marca sobre la barra de ki indica cuánto hace falta para el definitivo
+        document.getElementById('p1-ki-mark').style.left = FIGHTER_STATS[playerType].ult.cost + '%';
+        document.getElementById('p2-ki-mark').style.right = FIGHTER_STATS[enemyType].ult.cost + '%';
 
         this.startRound();
     }
@@ -214,7 +276,7 @@ class Game {
         const events = {
             onHit: (attacker, target, dealt, info) => this.onFighterHit(attacker, target, dealt, info),
             onBlock: (f) => { window.soundManager.playPunch(false); this.spawnLabel(f.position, 'BLOQUEO'); },
-            onUltimate: (f) => { if (f === this.player) this.stats.playerUltimates++; this.showAnnouncer(f.stats.ult.name, 900); },
+            onUltimate: (f) => { if (f === this.player) this.stats.playerUltimates++; this.showCutIn(f); },
         };
         this.player = new Fighter(this.playerType, true, this.scene, this.vfx, events);
         this.enemy  = new Fighter(this.enemyType, false, this.scene, this.vfx, events);
@@ -222,6 +284,9 @@ class Game {
         if (this.autoPlayerAI) this.autoPlayerAI = new FighterAI(this.player, this.enemy, this.vfx, this.autoPlayerAI.levelName || 'normal');
 
         this.roundLabelEl.textContent = `RONDA ${this.round}`;
+        this.updatePips();
+        this.hpLag = { p1: 1, p2: 1 };
+        this.hpLagTimer = 0;
         this.refreshHUD();
         this.startCountdown();
     }
@@ -290,7 +355,33 @@ class Game {
         this.setBattleUI(false);
         window.soundManager.stopMusic();
         window.soundManager.stopKiCharge();
+        this.showTitleBackdrop();
         document.getElementById('title-screen').classList.remove('hidden');
+    }
+
+    updatePips() {
+        const paint = (id, wins) => {
+            document.querySelectorAll(`#${id} i`).forEach((pip, i) => pip.classList.toggle('won', i < wins));
+        };
+        paint('p1-pips', this.roundWins.player);
+        paint('p2-pips', this.roundWins.cpu);
+    }
+
+    // El momento fuerte del juego: el definitivo corta la pantalla como una viñeta.
+    // El mundo casi se detiene mientras dura, y la carga del golpe sigue después.
+    showCutIn(f) {
+        this.slowMo = Math.max(this.slowMo, 0.5);
+        if (this.headless) return;
+        const el = document.getElementById('cutin');
+        const color = '#' + f.stats.aura.toString(16).padStart(6, '0');
+        el.style.setProperty('--cutin', color);
+        document.getElementById('cutin-name').textContent = f.stats.ult.name;
+        document.getElementById('cutin-portrait').style.backgroundImage = window.portraits ? `url(${window.portraits[f.type]})` : '';
+        el.classList.add('hidden');
+        void el.offsetWidth;
+        el.classList.remove('hidden');
+        clearTimeout(this._cutinTimer);
+        this._cutinTimer = setTimeout(() => el.classList.add('hidden'), 640);
     }
 
     showAnnouncer(text, duration = 1200) {
@@ -384,7 +475,7 @@ class Game {
 
             const hp = target.position.clone();
             hp.y = target.stats.muzzleY;
-            if (p.mesh.position.distanceTo(hp) < p.radius + 0.8) {
+            if (p.mesh.position.distanceTo(hp) < p.radius + target.stats.hitRadius) {
                 const dealt = target.receiveHit({ amount: p.damage, attacker: p.owner, kind: 'shot' });
                 // Con invulnerabilidad el proyectil sigue de largo: esquivar se nota
                 if (dealt <= 0) continue;
@@ -418,7 +509,7 @@ class Game {
             const along = toT.dot(b.direction);
             if (along < 0 || along > b.length) continue;
             const lateral = toT.addScaledVector(b.direction, -along).length();
-            if (lateral > b.radius + 0.55) continue;
+            if (lateral > b.radius + target.stats.hitRadius * 0.7) continue;
 
             const dealt = target.receiveHit({
                 amount: (b.damage / b.duration) * dt, attacker: b.owner, kind: 'beam', continuous: true,
@@ -474,10 +565,17 @@ class Game {
     // ─────────────────────────────────────────────
     refreshHUD() {
         if (!this.player || !this.enemy || this.headless) return;
-        this.p1HP.style.width = Math.max(0, (this.player.health / this.player.maxHealth) * 100) + '%';
-        this.p2HP.style.width = Math.max(0, (this.enemy.health  / this.enemy.maxHealth)  * 100) + '%';
-        this.p1Ki.style.width = Math.max(0, (this.player.ki / this.player.maxKi) * 100) + '%';
-        this.p2Ki.style.width = Math.max(0, (this.enemy.ki  / this.enemy.maxKi)  * 100) + '%';
+        // Barra de vida: la parte roja se vacía con demora para que se lea el daño
+        const scaleFill = (el, lagEl, pct) => {
+            const k = Math.max(0, pct);
+            el.style.transform = `scaleX(${k})`;
+            lagEl.style.transform = `scaleX(${k})`;
+            el.classList.toggle('low', k < 0.25);
+        };
+        scaleFill(this.p1HP, this.p1HPLag, this.player.health / this.player.maxHealth);
+        scaleFill(this.p2HP, this.p2HPLag, this.enemy.health / this.enemy.maxHealth);
+        this.p1Ki.style.transform = `scaleX(${this.player.ki / this.player.maxKi})`;
+        this.p2Ki.style.transform = `scaleX(${this.enemy.ki / this.enemy.maxKi})`;
 
         if (this.btnUltimate) {
             this.btnUltimate.classList.toggle('ready', this.player.ki >= this.player.ultimateCost);
@@ -511,6 +609,7 @@ class Game {
     endRound(winner, reason) {
         this.state = 'ended';
         if (winner !== 'draw') this.roundWins[winner]++;
+        this.updatePips();
 
         [this.player, this.enemy].forEach(f => { f.chargeKi(false); f.guard(false); });
 
@@ -549,7 +648,11 @@ class Game {
         const rival = FIGHTER_STATS[this.enemyType].label;
 
         title.textContent = { win: '¡VICTORIA!', lose: 'DERROTA', draw: 'EMPATE' }[result];
-        title.style.color = { win: '#ffd700', lose: '#ff4444', draw: '#ffffff' }[result];
+        title.style.color = { win: 'var(--ink)', lose: 'var(--hit)', draw: 'var(--ink)' }[result];
+        if (window.portraits) {
+            const shown = result === 'lose' ? this.enemyType : this.playerType;
+            document.getElementById('go-portrait').style.backgroundImage = `url(${window.portraits[shown]})`;
+        }
         sub.textContent = {
             win: `${me} venció a ${rival}`,
             lose: `${rival} venció a ${me}`,
@@ -613,6 +716,10 @@ class Game {
     //  MAIN LOOP
     // ─────────────────────────────────────────────
     step(rawDt) {
+        if (this.state === 'menu' && this.backdrop) {
+            this.backdrop.forEach(f => f.updatePose(rawDt));
+            return;
+        }
         if (this.state === 'paused' || this.state === 'menu') return;
 
         // Impacto y cámara lenta afectan al mundo, no a los menús ni al reloj real
@@ -637,7 +744,7 @@ class Game {
             this.checkRoundEnd(dt);
         }
 
-        this.vfx.update(dt);
+        this.vfx.update(dt, this.camera);
         this.tickTasks(rawDt);
         this.input.endFrame();
         this.refreshHUD();
@@ -649,6 +756,7 @@ class Game {
         const dt = Math.min(this.clock.getDelta(), 0.08);
         this.step(dt);
         this.renderer.render(this.scene, this.camera);
+        if (this.state === 'fighting') this.watchPerformance(dt);
     }
 }
 

@@ -1,0 +1,48 @@
+// Retratos reales de cada luchador, generados una vez al cargar a partir de su modelo 3D.
+// Reemplazan a los emoji de la selección, el HUD, la viñeta y la pantalla final.
+const PORTRAIT_FRAME = {
+    goku: { y: 1.55, dist: 2.3, turn: -0.42 },
+    vegeta: { y: 1.72, dist: 2.45, turn: -0.42 },
+    pikachu: { y: 1.0, dist: 1.9, turn: -0.3 },
+    charizard: { y: 2.45, dist: 3.1, turn: -0.35 },
+};
+
+function makePortraits(types) {
+    const size = 256;
+    const portraits = {};
+    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true });
+    renderer.setSize(size, size, false);
+    renderer.setPixelRatio(1);
+    renderer.outputEncoding = THREE.sRGBEncoding;
+    renderer.setClearColor(0x000000, 0);
+
+    const scene = new THREE.Scene();
+    scene.add(new THREE.HemisphereLight(0xfff2dc, 0x6b4a36, 0.85));
+    const key = new THREE.DirectionalLight(0xfff0d6, 0.95);
+    key.position.set(-3, 5, 5);
+    scene.add(key);
+    const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 50);
+
+    // Los luchadores se reutilizan sin efectos ni eventos: solo interesa su aspecto
+    const noVfx = { emitAura() {}, emitLightning() {} };
+    types.forEach(type => {
+        const fighter = new Fighter(type, true, scene, noVfx, {});
+        const frame = PORTRAIT_FRAME[type];
+        fighter.group.position.set(0, 0, 0);
+        fighter.group.rotation.y = frame.turn;
+        fighter.updatePose(1);
+        scene.updateMatrixWorld(true);
+
+        camera.position.set(0, frame.y + 0.1, frame.dist);
+        camera.lookAt(0, frame.y - 0.1, 0);
+        renderer.render(scene, camera);
+        portraits[type] = renderer.domElement.toDataURL('image/png');
+        scene.remove(fighter.group);
+    });
+
+    renderer.dispose();
+    if (renderer.forceContextLoss) renderer.forceContextLoss();
+    return portraits;
+}
+
+window.makePortraits = makePortraits;
