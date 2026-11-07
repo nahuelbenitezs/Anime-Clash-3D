@@ -44,7 +44,6 @@ class OnlineMatch {
         this.lastHeard = 0;
         this.projectiles = new Map();
         this.nextProjectileId = 1;
-        this.pending = {};
         this.remoteInput = {
             moveVector: { x: 0, z: 0 },
             held: {},
@@ -218,9 +217,9 @@ class OnlineMatch {
             let held = 0, latched = 0;
             INPUT_ACTIONS.forEach((action, i) => {
                 if (input.actions[action]) held |= 1 << i;
-                if (this.pending[action]) latched |= 1 << i;
+                if (input.latched[action]) latched |= 1 << i;
             });
-            this.pending = {};
+            input.endFrame();
             this.send({ t: 'i', x: round2(input.moveVector.x), z: round2(input.moveVector.z), h: held, l: latched });
         } else {
             this.send({ t: 'ping' });

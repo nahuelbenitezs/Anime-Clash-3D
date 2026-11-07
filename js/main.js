@@ -43,13 +43,18 @@ document.addEventListener('DOMContentLoaded', () => {
     // Boot Game object (starts rendering loop immediately)
     game = new Game();
     window.game = game;
+    game.online = new OnlineMatch(game);
     game.animate();
 
     // Loading → Title
     runLoadingScreen(() => {
-        buildRoster('roster-p1', selectedPlayer, (char) => { selectedPlayer = char; });
+        buildRoster('roster-p1', selectedPlayer, (char) => {
+            selectedPlayer = char;
+            if (game.online.active) game.online.pick(char);
+        });
         buildRoster('roster-p2', selectedEnemy, (char) => { selectedEnemy = char; });
         game.showTitleBackdrop();
+        game.online.joinFromUrl();
         document.getElementById('loading-screen').classList.add('hidden');
         document.getElementById('title-screen').classList.remove('hidden');
     });
@@ -71,16 +76,19 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.getElementById('btn-start-fight').addEventListener('click', () => {
+        if (game.online.active) { game.online.markReady(); return; }
         game.startMatch(selectedPlayer, selectedEnemy, difficulty);
     });
 
     // ── GAME OVER BUTTONS ──────────────────────
     document.getElementById('btn-rematch').addEventListener('click', () => {
+        if (game.online.active) { game.online.markReady(); return; }
         document.getElementById('gameover-screen').classList.add('hidden');
         game.startMatch(selectedPlayer, selectedEnemy);
     });
 
     document.getElementById('btn-back-sel').addEventListener('click', () => {
+        if (game.online.active) { game.online.backToSelection(); return; }
         document.getElementById('gameover-screen').classList.add('hidden');
         document.getElementById('selection-screen').classList.remove('hidden');
     });
@@ -110,6 +118,14 @@ function statPercents(s) {
         ['VEL', pct(s.speed, 5.4, 8)],
     ];
 }
+
+// Marca a un luchador en un roster sin disparar la selección (lo usa el modo online).
+function setRosterSelection(rosterId, type) {
+    document.querySelectorAll(`#${rosterId} .char-tile`).forEach(tile => {
+        tile.classList.toggle('selected', tile.dataset.char === type);
+    });
+}
+window.setRosterSelection = setRosterSelection;
 
 function buildRoster(rosterId, selected, onChange) {
     const roster = document.getElementById(rosterId);

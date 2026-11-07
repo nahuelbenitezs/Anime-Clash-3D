@@ -18,6 +18,8 @@ class Game {
         this.roundWins = { player: 0, cpu: 0 };
         this.matchTimer = 60;
         this.difficulty = 'normal';
+        this.mode = 'cpu'; // cpu | host | guest
+        this.online = null;
         this.matchTimerEl = document.getElementById('battle-timer');
         this.roundLabelEl = document.getElementById('round-label');
 
@@ -56,6 +58,7 @@ class Game {
 
     resetStats() {
         this.stats = { playerDamageDealt: 0, playerCombos: 0, playerMaxCombo: 0, playerUltimates: 0 };
+        this.rivalStats = { dmg: 0, ults: 0 };
     }
 
     // ─────────────────────────────────────────────
@@ -219,6 +222,7 @@ class Game {
 
         // Si el celular cambia de app o se bloquea, la pelea se pausa sola
         document.addEventListener('visibilitychange', () => {
+            if (this.mode !== 'cpu') return;
             if (document.hidden && (this.state === 'fighting' || this.state === 'countdown')) this.togglePause();
         });
     }
@@ -274,14 +278,30 @@ class Game {
         this.comboEl.classList.add('hidden');
         this.matchTimer = 60;
 
+        if (this.mode === 'guest') {
+            // El invitado no simula: los luchadores solo muestran lo que manda el anfitrión
+            this.player = new Fighter(this.playerType, true, this.scene, this.vfx, {});
+            this.enemy  = new Fighter(this.enemyType, false, this.scene, this.vfx, {});
+            this.roundLabelEl.textContent = `RONDA ${this.round}`;
+            this.updatePips();
+            this.refreshHUD();
+            this.state = 'countdown';
+            return;
+        }
+
         const events = {
             onHit: (attacker, target, dealt, info) => this.onFighterHit(attacker, target, dealt, info),
             onBlock: (f) => { window.soundManager.playPunch(false); this.spawnLabel(f.position, 'BLOQUEO'); },
-            onUltimate: (f) => { if (f === this.player) this.stats.playerUltimates++; this.showCutIn(f); },
+            onUltimate: (f) => {
+                if (f === this.player) this.stats.playerUltimates++;
+                else this.rivalStats.ults++;
+                this.showCutIn(f);
+            },
         };
         this.player = new Fighter(this.playerType, true, this.scene, this.vfx, events);
         this.enemy  = new Fighter(this.enemyType, false, this.scene, this.vfx, events);
-        this.ai = new FighterAI(this.enemy, this.player, this.vfx, this.difficulty);
+        this.ai = this.mode === 'cpu' ? new FighterAI(this.enemy, this.player, this.vfx, this.difficulty) : null;
+        if (this.mode === 'host') this.online.send({ t: 'round', n: this.round });
         if (this.autoPlayerAI) this.autoPlayerAI = new FighterAI(this.player, this.enemy, this.vfx, this.autoPlayerAI.levelName || 'normal');
 
         this.roundLabelEl.textContent = `RONDA ${this.round}`;
@@ -327,6 +347,11 @@ class Game {
 
     togglePause() {
         const pauseScreen = document.getElementById('pause-screen');
+        // Online no se puede frenar la pelea del otro: el menú se abre, pero sigue corriendo
+        if (this.mode !== 'cpu') {
+            if (this.state !== 'menu' && this.state !== 'gameover') pauseScreen.classList.toggle('hidden');
+            return;
+        }
         if (this.state === 'fighting' || this.state === 'countdown') {
             this.resumeState = this.state;
             this.state = 'paused';
@@ -349,6 +374,8 @@ class Game {
     }
 
     quitToMenu() {
+        if (this.online) this.online.leave();
+        this.mode = 'cpu';
         this.tasks = [];
         this.state = 'menu';
         this.clearFighters();
@@ -407,24 +434,38 @@ class Game {
     // ─────────────────────────────────────────────
     //  PLAYER INPUT
     // ─────────────────────────────────────────────
-    handlePlayerInput(dt) {
-        const p = this.player, input = this.input;
+    // Vale para el jugador local y para el rival online: misma regla, otra fuente de datos.
+    applyInput(p, foe, input, dt) {
         if (!p || p.isDead) return;
         const mv = input.moveVector;
 
         p.guard(input.wants('guard'));
         p.chargeKi(input.wants('charge'));
-        if (input.wants('dash')) p.dash(mv.x, mv.z, this.enemy);
-        if (input.wants('ultimate')) p.triggerUltimate(this.enemy);
-        if (input.wants('blast')) p.shootBlast(this.enemy);
-        if (input.wants('attack')) p.attack(this.enemy);
+        if (input.wants('dash')) p.dash(mv.x, mv.z, foe);
+        if (input.wants('ultimate')) p.triggerUltimate(foe);
+        if (input.wants('blast')) p.shootBlast(foe);
+        if (input.wants('attack')) p.attack(foe);
         p.move(mv.x, mv.z, dt);
+    }
+
+    // En online cada uno ve "VOS" sobre su luchador.
+    markOnlineNames(isHost) {
+        const me = isHost ? this.p1NameEl : this.p2NameEl;
+        me.textContent = `VOS · ${me.textContent}`;
+    }
+
+    localFighter() {
+        return this.mode === 'guest' ? this.enemy : this.player;
     }
 
     // ─────────────────────────────────────────────
     //  GOLPES
     // ─────────────────────────────────────────────
     onFighterHit(attacker, target, dealt, info) {
+        if (attacker !== this.player && this.mode === 'host') {
+            this.rivalStats.dmg += dealt;
+            if (info.kind === 'melee') this.online.fx('combo');
+        }
         if (attacker === this.player) {
             this.stats.playerDamageDealt += dealt;
             if (info.kind === 'melee') this.registerCombo();
@@ -520,7 +561,10 @@ class Game {
             });
             if (dealt <= 0) continue;
             if (b.owner === this.player) this.stats.playerDamageDealt += dealt;
-            else this.triggerDamageFlash();
+            else {
+                this.rivalStats.dmg += dealt;
+                this.triggerDamageFlash();
+            }
 
             // El daño del rayo se muestra agrupado, no un número por cuadro
             const acc = (this.beamNumbers.get(b) || 0) + dealt;
@@ -582,7 +626,8 @@ class Game {
         this.p2Ki.style.transform = `scaleX(${this.enemy.ki / this.enemy.maxKi})`;
 
         if (this.btnUltimate) {
-            this.btnUltimate.classList.toggle('ready', this.player.ki >= this.player.ultimateCost);
+            const me = this.localFighter();
+            this.btnUltimate.classList.toggle('ready', me.ki >= me.ultimateCost);
         }
 
         const secs = Math.ceil(this.matchTimer);
@@ -624,6 +669,7 @@ class Game {
         this.after(0.5, () => {
             this.showAnnouncer(headline, 900);
             if (winner === 'player') window.soundManager.playVictory();
+            if (winner === 'cpu' && this.mode === 'host') this.online.fx('win');
         });
         this.after(1.6, () => this.showAnnouncer(winnerName, 900));
         this.after(3.0, () => {
@@ -639,7 +685,13 @@ class Game {
 
     showGameOver() {
         this.state = 'gameover';
-        const { player, cpu } = this.roundWins;
+        if (this.mode === 'host') {
+            this.online.send({ t: 'over', wins: this.roundWins, dmg: this.rivalStats.dmg, ults: this.rivalStats.ults });
+        }
+        // El invitado ve el resultado desde su lado: su luchador es el "enemigo" de la simulación
+        const flip = this.mode === 'guest';
+        const player = flip ? this.roundWins.cpu : this.roundWins.player;
+        const cpu = flip ? this.roundWins.player : this.roundWins.cpu;
         const result = player === cpu ? 'draw' : (player > cpu ? 'win' : 'lose');
         this.lastResult = result;
         window.soundManager.stopMusic();
@@ -648,13 +700,15 @@ class Game {
         const title = document.getElementById('go-title');
         const sub   = document.getElementById('go-sub');
         const stats = document.getElementById('go-stats');
-        const me = FIGHTER_STATS[this.playerType].label;
-        const rival = FIGHTER_STATS[this.enemyType].label;
+        const myType = flip ? this.enemyType : this.playerType;
+        const rivalType = flip ? this.playerType : this.enemyType;
+        const me = FIGHTER_STATS[myType].label;
+        const rival = FIGHTER_STATS[rivalType].label;
 
         title.textContent = { win: '¡VICTORIA!', lose: 'DERROTA', draw: 'EMPATE' }[result];
         title.style.color = { win: 'var(--ink)', lose: 'var(--hit)', draw: 'var(--ink)' }[result];
         if (window.portraits) {
-            const shown = result === 'lose' ? this.enemyType : this.playerType;
+            const shown = result === 'lose' ? rivalType : myType;
             document.getElementById('go-portrait').style.backgroundImage = `url(${window.portraits[shown]})`;
         }
         sub.textContent = {
@@ -724,6 +778,10 @@ class Game {
             this.backdrop.forEach(f => f.updatePose(rawDt));
             return;
         }
+        if (this.mode === 'guest') {
+            this.stepGuest(rawDt);
+            return;
+        }
         if (this.state === 'paused' || this.state === 'menu') return;
 
         // Impacto y cámara lenta afectan al mundo, no a los menús ni al reloj real
@@ -733,8 +791,9 @@ class Game {
 
         if (this.state === 'fighting') {
             if (this.autoPlayerAI) this.autoPlayerAI.update(dt);
-            else this.handlePlayerInput(dt);
-            this.ai.update(dt);
+            else this.applyInput(this.player, this.enemy, this.input, dt);
+            if (this.mode === 'host') this.applyInput(this.enemy, this.player, this.online.remoteInput, dt);
+            else this.ai.update(dt);
             this.tickCombo(dt);
         }
 
@@ -751,6 +810,23 @@ class Game {
         this.vfx.update(dt, this.camera);
         this.tickTasks(rawDt);
         this.input.endFrame();
+        if (this.mode === 'host') {
+            this.online.remoteInput.endFrame();
+            this.online.tickHost(rawDt);
+        }
+        this.refreshHUD();
+        this.updateCamera(dt);
+    }
+
+    // El invitado no simula: muestra lo último que recibió del anfitrión.
+    stepGuest(dt) {
+        if (this.state === 'gameover') return;
+        if (this.player && this.enemy) {
+            this.player.netTick(dt);
+            this.enemy.netTick(dt);
+        }
+        this.vfx.update(dt, this.camera);
+        this.tickCombo(dt);
         this.refreshHUD();
         this.updateCamera(dt);
     }

@@ -430,6 +430,36 @@ body.is-paused #util-bar { z-index: 110; }
     white-space: nowrap;
 }
 
+/* ─────────────── Online ─────────────── */
+.title-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+#online-screen { background: rgba(20, 16, 12, 0.6); }
+.online-card { max-width: min(94vw, 460px); max-height: 100%; gap: 8px; padding: 12px 20px; }
+.online-lead { text-align: center; line-height: 1.2; }
+.online-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.online-join { display: flex; gap: 6px; }
+#online-input {
+    width: 6.2em;
+    min-height: 44px;
+    padding: 0 8px;
+    font: inherit;
+    font-size: 1.05rem;
+    letter-spacing: 0.1em;
+    text-align: center;
+    text-transform: uppercase;
+    color: var(--ink);
+    background: #fff;
+    border: 2px solid var(--ink);
+    -webkit-user-select: text; user-select: text;
+    touch-action: auto;
+}
+.online-room { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px 12px; border-top: 2px solid var(--ink); padding-top: 6px; }
+#online-code { font-family: var(--font-display); font-size: 2.2rem; line-height: 1; letter-spacing: 0.1em; font-weight: 400; }
+#online-status { min-height: 1.2em; text-align: center; line-height: 1.2; }
+#online-status.error { color: var(--hit); }
+body.online-mode .difficulty,
+body.online-mode .pc-hint { display: none; }
+body.online-mode #roster-p2 { pointer-events: none; }
+
 /* ─────────────── Pantallas bajas: celular apaisado ─────────────── */
 @media (max-height: 430px) {
     #joystick-zone { width: 104px; height: 104px; }

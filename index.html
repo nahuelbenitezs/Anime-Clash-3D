@@ -16,6 +16,7 @@
     <script src="vendor/GLTFLoader.js"></script>
     <script src="vendor/DRACOLoader.js"></script>
     <script src="vendor/SkeletonUtils.js"></script>
+    <script src="vendor/peerjs.min.js"></script>
 </head>
 <body>
 
@@ -51,8 +52,33 @@
     <div class="title-block">
         <h1 class="logo">ANIME CLASH <span>3D</span></h1>
         <p class="title-hint">Juego de peleas. Vos contra la CPU, al mejor de tres rondas.</p>
-        <button id="btn-play" class="ink-btn primary">JUGAR</button>
+        <div class="title-actions">
+            <button id="btn-play" class="ink-btn primary">JUGAR</button>
+            <button id="btn-online" class="ink-btn">ONLINE</button>
+        </div>
         <p class="title-legal">Proyecto de fans sin fines de lucro. No es un producto oficial. Los personajes pertenecen a sus dueños.</p>
+    </div>
+</div>
+
+<!-- ═══════════════ ONLINE ═══════════════ -->
+<div id="online-screen" class="overlay hidden">
+    <div class="paper-card online-card">
+        <h2 class="card-title">ONLINE</h2>
+        <p class="online-lead">Peleá contra un amigo: uno crea la sala y el otro entra con el código.</p>
+        <div class="online-actions">
+            <button id="btn-online-create" class="ink-btn primary">CREAR SALA</button>
+            <div class="online-join">
+                <input id="online-input" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="4" placeholder="CÓDIGO" aria-label="Código de sala">
+                <button id="btn-online-join" class="ink-btn">ENTRAR</button>
+            </div>
+        </div>
+        <div id="online-room" class="online-room hidden">
+            <span>Tu sala</span>
+            <strong id="online-code"></strong>
+            <button id="btn-online-share" class="ink-btn">COMPARTIR LINK</button>
+        </div>
+        <p id="online-status" role="status"></p>
+        <button id="btn-online-back" class="ink-btn">VOLVER</button>
     </div>
 </div>
 
@@ -65,7 +91,7 @@
         </section>
         <div class="sel-vs" aria-hidden="true">VS</div>
         <section class="sel-col">
-            <h2 class="sel-title">CPU</h2>
+            <h2 class="sel-title" id="sel-title-rival">CPU</h2>
             <div class="char-roster" id="roster-p2"></div>
         </section>
     </div>
@@ -183,6 +209,7 @@
 <script src="js/controls.js"></script>
 <script src="js/portraits.js"></script>
 <script src="js/game.js"></script>
+<script src="js/online.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>

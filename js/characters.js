@@ -1408,6 +1408,47 @@ class Fighter {
         this.updatePose(dt);
     }
 
+    // Online, en el invitado: estado recibido del anfitrión
+    setNetTarget(data, stateNames) {
+        const [x, z, rot, stateIdx, timer, step, hp, ki, invuln] = data;
+        this.netTarget = { x, z, rot };
+        this.health = hp;
+        this.ki = ki;
+        this.animStep = step;
+        this.netInvuln = invuln;
+        const state = stateNames[stateIdx] || 'idle';
+        if (state !== this.state) {
+            if (this.state === 'charge') this.setChargingSound(false);
+            if (state === 'charge') this.setChargingSound(true);
+            this.state = state;
+            this.stateTimer = timer;
+        }
+        this.isDead = state === 'ko';
+    }
+
+    netTick(dt) {
+        this.stateTimer += dt;
+        const n = this.netTarget;
+        if (n) {
+            const k = 1 - Math.exp(-16 * dt);
+            if (Math.hypot(n.x - this.position.x, n.z - this.position.z) > 4) this.position.set(n.x, 0, n.z);
+            this.position.x += (n.x - this.position.x) * k;
+            this.position.z += (n.z - this.position.z) * k;
+            let delta = n.rot - this.rotationY;
+            delta = Math.atan2(Math.sin(delta), Math.cos(delta));
+            this.rotationY += delta * k;
+        }
+        this.group.position.copy(this.position);
+        this.group.rotation.y = this.rotationY;
+        this.group.visible = !this.netInvuln || Math.floor(this.animClock * 25) % 2 === 0;
+        if (this.state === 'charge') this.vfx.emitAura(this.position, this.auraColor, 2);
+        if (this.state === 'ultimate' && this.stateTimer < this.stats.ult.windup) {
+            this.vfx.emitAura(this.position, this.stats.ult.color, 2);
+        }
+        if (this.state === 'dash') this.vfx.emitAura(this.position, this.auraColor, 1);
+        this.updatePose(dt);
+    }
+
     updatePose(dt) {
         this.animClock += dt;
         if (!this.rig) { this.applyProceduralAnimation(dt); return; }
