@@ -144,7 +144,7 @@ function buildRoster(rosterId, selected, onChange) {
             roster.querySelectorAll('.char-tile').forEach(t => t.classList.remove('selected'));
             tile.classList.add('selected');
             onChange(type);
-            if (navigator.vibrate) navigator.vibrate(18);
+            window.buzz(18);
         });
         roster.appendChild(tile);
     });

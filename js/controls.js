@@ -175,7 +175,7 @@ class InputManager {
             btn.classList.add('active');
             this.actions[actionName] = true;
             this.latched[actionName] = true;
-            if (navigator.vibrate) navigator.vibrate(20);
+            window.buzz(20);
         };
 
         const release = (e) => {

@@ -130,8 +130,7 @@ class VFXManager {
     // ─────────────────────────────────────────────
     shake(amount = 0.4) {
         this.screenShakeIntensity = Math.max(this.screenShakeIntensity, amount);
-        const gestured = !navigator.userActivation || navigator.userActivation.hasBeenActive;
-        if (navigator.vibrate && gestured) navigator.vibrate(Math.min(150, Math.floor(amount * 200)));
+        window.buzz(Math.min(150, Math.floor(amount * 200)));
     }
 
     createHitSparks(position, color = 0xffe600, count = 18) {

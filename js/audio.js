@@ -1,4 +1,10 @@
 // Sound & Music Synthesizer via Web Audio API (Zero external audio file dependencies)
+// Vibra solo si el navegador lo permite: antes del primer toque, llamar a vibrate da error.
+window.buzz = function (ms) {
+    const gestured = !navigator.userActivation || navigator.userActivation.hasBeenActive;
+    if (navigator.vibrate && gestured) navigator.vibrate(ms);
+};
+
 class SoundManager {
     constructor() {
         this.ctx = null;
