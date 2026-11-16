@@ -163,6 +163,7 @@ h1, h2 { font-weight: 400; }
 .difficulty { display: flex; border: 2px solid var(--paper); }
 .diff-btn { font-family: var(--font-display); font-size: clamp(0.85rem, 3.5vh, 1.1rem); letter-spacing: 0.04em; min-height: 40px; padding: 2px 12px; color: var(--paper); }
 .diff-btn.selected { background: var(--paper); color: var(--ink); }
+.combat-hint { width: 100%; text-align: center; color: var(--paper-dim); font-size: clamp(0.65rem, 2.2vh, 0.82rem); }
 .pc-hint { width: 100%; text-align: center; font-size: 0.82rem; color: var(--paper-dim); }
 kbd { font: inherit; color: var(--paper); border: 1px solid var(--paper-dim); padding: 0 4px; margin-left: 6px; }
 .touch-device .desktop-only { display: none; }
@@ -216,6 +217,9 @@ kbd { font: inherit; color: var(--paper); border: 1px solid var(--paper-dim); pa
 .hud-p2 .ki-track { align-self: flex-end; transform: skewX(14deg); }
 .ki-fill { position: absolute; inset: 0; width: 100%; background: var(--ki); transform-origin: left center; }
 .hud-p2 .ki-fill { transform-origin: right center; }
+.ki-fill.sparking { background: #fff4a8; box-shadow: 0 0 10px #ffe06a; animation: sparking-pulse 0.35s infinite alternate; }
+@keyframes sparking-pulse { to { background: #ff8e20; } }
+body.in-battle #canvas-container, body.in-battle #canvas-container canvas, body.in-battle #touch-controls, body.in-battle .action-btn { touch-action: none; }
 .ki-mark { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--paper); }
 .hud-center { display: flex; flex-direction: column; align-items: center; min-width: clamp(44px, 11vh, 68px); }
 #battle-timer {

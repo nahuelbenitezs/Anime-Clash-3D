@@ -23,6 +23,10 @@ Peleás contra la CPU al mejor de tres rondas, de 60 segundos cada una. Gana la 
 
 Algunos consejos:
 
+- **Persecución:** mantené cargar ki y pulsá esquivar para avanzar hacia el rival; cuesta 15 de ki.
+- **Desaparición:** mantené guardia y pulsá esquivar para aparecer detrás del rival; cuesta 25 de ki y necesita espacio. La guardia solo protege desde el frente.
+- **Contra:** activá la guardia justo antes de un golpe cuerpo a cuerpo frontal para interrumpir al atacante.
+- **Máximo poder:** mantené la carga un segundo con el ki lleno. Los golpes son más rápidos y fuertes mientras la barra se consume.
 - **Los definitivos se esquivan de costado:** la dirección queda fija cuando empieza la carga.
 - **Dos ráfagas que chocan se anulan.**
 - **Recibir daño da ki,** así que quien va perdiendo suele tener una oportunidad de remontar.
@@ -89,11 +93,18 @@ Pruebas realizadas con el roster original de cuatro luchadores, antes de agregar
 
 **Sin probar todavía:**
 
+- **Las nuevas mecánicas en una pelea real y el zoom en celulares reales.** Falta validar la sensación de juego, el equilibrio y el comportamiento en distintos navegadores.
 - **Los personajes nuevos en el navegador.** Falta verificar visualmente las poses, el rendimiento y el equilibrio de Naruto, Tanjiro y el nuevo Vegeta.
 - **Un celular real.** Ni el tacto real, ni el rendimiento, ni la temperatura, ni la batería. El emulador solo comprueba el tamaño de pantalla y los eventos táctiles.
 - **Online entre dos redes distintas.** Las pestañas de la prueba comparten red, y las redes reales pueden bloquear la conexión directa o agregar retraso.
 - **El sonido de oído.** Se comprobó que el audio se activa sin errores, no cómo suena.
 - **Una persona jugando.** El equilibrio y la dificultad se midieron con bots, así que pueden sentirse distintos en la mano.
+
+### Inspiración de combate
+
+Las persecuciones, defensas precisas y el estado de poder son adaptaciones propias inspiradas en [el entrenamiento de combate de DRAGON BALL: Sparking! ZERO](https://blog.playstation.com/2024/06/28/dragon-ball-sparking-zero-battle-training-mode-gameplay-revealed/) y [la explicación de sus contras de Bandai Namco](https://en.bandainamcoent.eu/dragon-ball/news/dragon-ball-sparking-zero-producer-interview). El juego sigue siendo una pelea en una arena terrestre, sin vuelo ni transformaciones.
+
+Las reglas básicas de estas mecánicas se pueden comprobar con `node tests/combat-check.cjs`.
 
 ## Créditos
 

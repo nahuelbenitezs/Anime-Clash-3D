@@ -135,6 +135,7 @@ class FighterAI {
         switch (this.plan) {
             case 'approach': {
                 s.chargeKi(false);
+                if (dist > 7 && s.ki >= 35 && Math.random() < dt * this.level.aggression * 0.35) s.rush(f);
                 s.move(nx - nz * strafe, nz + nx * strafe, dt);
                 break;
             }

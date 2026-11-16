@@ -25,7 +25,7 @@ function packFighter(f) {
     return [
         round2(f.position.x), round2(f.position.z), round2(f.rotationY),
         NET_STATES.indexOf(f.state), round2(f.stateTimer), f.animStep,
-        round2(f.health), round2(f.ki), f.invuln > 0 ? 1 : 0,
+        round2(f.health), round2(f.ki), f.invuln > 0 ? 1 : 0, f.sparking ? 1 : 0,
     ];
 }
 

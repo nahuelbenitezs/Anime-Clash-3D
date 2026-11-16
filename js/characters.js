@@ -444,6 +444,10 @@ class Fighter {
         this.attackCd = 0;
         this.blastCd = 0;
         this.dashCd = 0;
+        this.dragonDash = false;
+        this.sparking = false;
+        this.sparkingCharge = 0;
+        this.perfectGuard = 0;
         this.hurtDuration = 0.28;
         this.pendingHit = null;
         this.pendingUlt = null;
@@ -1092,7 +1096,7 @@ class Fighter {
         if (this.state === 'ko') return;
         if (this.state === state) return;
 
-        if (this.state === 'charge') this.setChargingSound(false);
+        if (this.state === 'charge') { this.setChargingSound(false); this.sparkingCharge = 0; }
 
         this.state = state;
         this.stateTimer = 0;
@@ -1136,7 +1140,7 @@ class Fighter {
         this.comboStep = (step + 1) % 3;
         this.animStep = step;
         this.comboWindow = 0.7;
-        this.attackCd = (step === 2 ? 0.55 : 0.3) / this.stats.attackRate;
+        this.attackCd = (step === 2 ? 0.55 : 0.3) / this.stats.attackRate * (this.sparking ? 0.75 : 1);
         this.pendingHit = { t: 0.1, step, target };
 
         // Pequeño avance hacia el rival para que el golpe se sienta con peso
@@ -1156,7 +1160,7 @@ class Fighter {
         if (dist > this.stats.reach || target.isDead) return;
 
         const heavy = step === 2;
-        const damage = [5, 6, 10][step] * this.stats.power;
+        const damage = [5, 6, 10][step] * this.stats.power * (this.sparking ? 1.15 : 1);
         const dealt = target.receiveHit({ amount: damage, attacker: this, heavy, kind: 'melee' });
         if (dealt <= 0) return;
 
@@ -1189,7 +1193,7 @@ class Fighter {
 
     chargeKi(charging) {
         if (charging) {
-            if (!this.canAct() || this.ki >= this.maxKi) {
+            if (!this.canAct() || this.sparking) {
                 if (this.state === 'charge') this.setAnimation('idle');
                 return;
             }
@@ -1198,16 +1202,56 @@ class Fighter {
                 this.setChargingSound(true);
             }
         } else if (this.state === 'charge') {
+            this.sparkingCharge = 0;
             this.setAnimation('idle');
         }
     }
 
     guard(on) {
         if (on) {
-            if (this.canAct() && this.state !== 'guard' && this.state !== 'attack') this.setAnimation('guard');
+            if (this.canAct() && this.state !== 'guard' && this.state !== 'attack') {
+                this.setAnimation('guard');
+                this.perfectGuard = 0.18;
+            }
         } else if (this.state === 'guard') {
             this.setAnimation('idle');
         }
+    }
+
+    // Guardia + esquiva: aparece detrás del rival si hay espacio en la arena.
+    vanish(opponent) {
+        if (!opponent || !this.canAct() || this.dashCd > 0 || this.ki < 25) return false;
+        const forward = new THREE.Vector3(Math.sin(opponent.rotationY), 0, Math.cos(opponent.rotationY));
+        const point = opponent.position.clone().addScaledVector(forward, -1.5);
+        if (Math.abs(point.x) > 10.8 || Math.abs(point.z) > 5.8) return false;
+        this.position.copy(point);
+        this.group.position.copy(point);
+        this.rotationY = this.targetRotationY = Math.atan2(forward.x, forward.z);
+        this.group.rotation.y = this.rotationY;
+        this.velocity.set(0, 0, 0);
+        this.dashDir.set(0, 0, 0);
+        this.dragonDash = false;
+        this.ki -= 25;
+        this.dashCd = this.stats.dashCooldown;
+        this.dashInvuln = 0.15;
+        this.setAnimation('dash');
+        window.soundManager.playDash();
+        this.vfx.emitAura(this.position, this.auraColor, 6);
+        if (this.events.onVanish) this.events.onVanish(this);
+        return true;
+    }
+
+    // Carga + esquiva: carrera hacia el rival con gasto fijo de ki.
+    rush(opponent) {
+        if (!opponent || !this.canAct() || this.dashCd > 0 || this.ki < 15) return false;
+        const dx = opponent.position.x - this.position.x;
+        const dz = opponent.position.z - this.position.z;
+        const dist = Math.hypot(dx, dz);
+        if (dist < 2 || !this.dash(dx, dz, opponent)) return false;
+        this.ki -= 15;
+        this.dragonDash = true;
+        this.dashInvuln = 0.1;
+        return true;
     }
 
     dash(mx, mz, opponent) {
@@ -1221,6 +1265,7 @@ class Fighter {
         }
         if (len < 0.001) { mx = this.isPlayer ? -1 : 1; mz = 0; len = 1; }
 
+        this.dragonDash = false;
         this.dashDir.set(mx / len, 0, mz / len);
         this.dashCd = this.stats.dashCooldown;
         this.dashInvuln = 0.2;
@@ -1268,7 +1313,21 @@ class Fighter {
         if (pushDir.lengthSq() < 0.0001) pushDir.set(this.isPlayer ? -1 : 1, 0, 0);
         pushDir.normalize();
 
-        if (this.state === 'guard') {
+        const front = Math.sin(this.rotationY) * -pushDir.x + Math.cos(this.rotationY) * -pushDir.z;
+        if (this.state === 'guard' && front > 0) {
+            // Un bloqueo recién activado desvía un golpe frontal y abre al rival.
+            if (!continuous && kind === 'melee' && this.perfectGuard > 0 && front > 0.25) {
+                this.perfectGuard = 0;
+                this.ki = Math.min(this.maxKi, this.ki + 5);
+                attacker.pendingHit = null;
+                if (attacker.canAct()) {
+                    attacker.setAnimation('hurt');
+                    attacker.hurtDuration = 0.35;
+                    attacker.velocity.addScaledVector(pushDir, -8);
+                }
+                if (this.events.onBlock) this.events.onBlock(this, true);
+                return 0;
+            }
             const guardBroken = heavy && kind === 'melee';
             if (!guardBroken) {
                 const dealt = amount * (continuous ? 0.35 : 0.25);
@@ -1329,7 +1388,14 @@ class Fighter {
         this.dashCd = Math.max(0, this.dashCd - dt);
         this.comboWindow = Math.max(0, this.comboWindow - dt);
         this.dashInvuln = Math.max(0, this.dashInvuln - dt);
-        if (!this.isDead) this.ki = Math.min(this.maxKi, this.ki + 2 * dt);
+        this.perfectGuard = Math.max(0, this.perfectGuard - dt);
+        if (!this.isDead) {
+            if (this.sparking) {
+                this.ki = Math.max(0, this.ki - 10 * dt);
+                if (this.ki <= 0) this.sparking = false;
+                else if (Math.random() < 0.35) this.vfx.emitAura(this.position, this.auraColor, 1);
+            } else if (this.state !== 'charge') this.ki = Math.min(this.maxKi, this.ki + 2 * dt);
+        }
 
         // Golpe en su cuadro activo
         if (this.pendingHit) {
@@ -1377,7 +1443,13 @@ class Fighter {
 
         // Dash e inercia
         if (this.state === 'dash') {
-            this.position.addScaledVector(this.dashDir, this.speed * 3 * dt);
+            if (this.dragonDash && opponent) {
+                const dx = opponent.position.x - this.position.x, dz = opponent.position.z - this.position.z;
+                const distance = Math.hypot(dx, dz);
+                if (distance < 1.6) { this.dragonDash = false; this.setAnimation('idle'); }
+                else this.dashDir.set(dx / distance, 0, dz / distance);
+            }
+            if (this.state === 'dash') this.position.addScaledVector(this.dashDir, this.speed * (this.dragonDash ? 3.7 : 3) * dt);
             if (Math.random() < 0.5) this.vfx.emitAura(this.position, this.auraColor, 1);
         }
         this.position.addScaledVector(this.velocity, dt);
@@ -1401,7 +1473,15 @@ class Fighter {
 
         if (this.state === 'charge') {
             this.ki = Math.min(this.maxKi, this.ki + this.stats.kiCharge * dt);
-            if (this.ki >= this.maxKi) this.setAnimation('idle');
+            if (this.ki >= this.maxKi) {
+                this.sparkingCharge += dt;
+                if (this.sparkingCharge >= 1) {
+                    this.sparking = true;
+                    this.sparkingCharge = 0;
+                    this.setAnimation('idle');
+                    if (this.events.onSparking) this.events.onSparking(this);
+                }
+            } else this.sparkingCharge = 0;
             this.vfx.emitAura(this.position, this.auraColor, 2);
             if (this.type === 'pikachu' && Math.random() < 0.35) {
                 const sparkP = this.position.clone().add(new THREE.Vector3((Math.random()-0.5)*1.5, 0.8, (Math.random()-0.5)*1.5));
@@ -1421,14 +1501,15 @@ class Fighter {
         else if (this.state === 'blast' && t > 0.3) this.setAnimation('idle');
         else if (this.state === 'ultimate' && t > this.ultEnd) this.setAnimation('idle');
         else if (this.state === 'hurt' && t > this.hurtDuration) this.setAnimation('idle');
-        else if (this.state === 'dash' && t > 0.22) this.setAnimation('idle');
+        else if (this.state === 'dash' && t > (this.dragonDash ? 0.55 : 0.22)) { this.dragonDash = false; this.setAnimation('idle'); }
 
         this.updatePose(dt);
     }
 
     // Online, en el invitado: estado recibido del anfitrión
     setNetTarget(data, stateNames) {
-        const [x, z, rot, stateIdx, timer, step, hp, ki, invuln] = data;
+        const [x, z, rot, stateIdx, timer, step, hp, ki, invuln, sparking] = data;
+        this.sparking = !!sparking;
         this.netTarget = { x, z, rot };
         this.health = hp;
         this.ki = ki;
@@ -1459,7 +1540,7 @@ class Fighter {
         this.group.position.copy(this.position);
         this.group.rotation.y = this.rotationY;
         this.group.visible = !this.netInvuln || Math.floor(this.animClock * 25) % 2 === 0;
-        if (this.state === 'charge') this.vfx.emitAura(this.position, this.auraColor, 2);
+        if (this.state === 'charge' || this.sparking) this.vfx.emitAura(this.position, this.auraColor, 2);
         if (this.state === 'ultimate' && this.stateTimer < this.stats.ult.windup) {
             this.vfx.emitAura(this.position, this.stats.ult.color, 2);
         }

@@ -291,7 +291,9 @@ class Game {
 
         const events = {
             onHit: (attacker, target, dealt, info) => this.onFighterHit(attacker, target, dealt, info),
-            onBlock: (f) => { window.soundManager.playPunch(false); this.spawnLabel(f.position, 'BLOQUEO'); },
+            onBlock: (f, perfect) => { window.soundManager.playPunch(false); this.spawnLabel(f.position, perfect ? '¡CONTRA!' : 'BLOQUEO'); },
+            onSparking: (f) => this.spawnLabel(f.position, '¡MÁXIMO PODER!'),
+            onVanish: (f) => this.spawnLabel(f.position, '¡DESAPARICIÓN!'),
             onUltimate: (f) => {
                 if (f === this.player) this.stats.playerUltimates++;
                 else this.rivalStats.ults++;
@@ -441,7 +443,11 @@ class Game {
 
         p.guard(input.wants('guard'));
         p.chargeKi(input.wants('charge'));
-        if (input.wants('dash')) p.dash(mv.x, mv.z, foe);
+        if (input.wants('dash')) {
+            if (input.wants('guard')) p.vanish(foe);
+            else if (input.wants('charge')) p.rush(foe);
+            else p.dash(mv.x, mv.z, foe);
+        }
         if (input.wants('ultimate')) p.triggerUltimate(foe);
         if (input.wants('blast')) p.shootBlast(foe);
         if (input.wants('attack')) p.attack(foe);
@@ -624,6 +630,8 @@ class Game {
         scaleFill(this.p2HP, this.p2HPLag, this.enemy.health / this.enemy.maxHealth);
         this.p1Ki.style.transform = `scaleX(${this.player.ki / this.player.maxKi})`;
         this.p2Ki.style.transform = `scaleX(${this.enemy.ki / this.enemy.maxKi})`;
+        this.p1Ki.classList.toggle('sparking', this.player.sparking);
+        this.p2Ki.classList.toggle('sparking', this.enemy.sparking);
 
         if (this.btnUltimate) {
             const me = this.localFighter();

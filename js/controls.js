@@ -18,8 +18,26 @@ class InputManager {
         this.joystickCenter = { x: 0, y: 0 };
         this.joystickRadius = 45;
 
+        this.preventBattleZoom();
         this.setupKeyboard();
         this.setupTouchControls();
+    }
+
+    // En Safari iOS el zoom por doble toque puede ignorar touch-action. Se cancela
+    // solo sobre la arena durante la pelea; los menús conservan su navegación.
+    preventBattleZoom() {
+        let lastTap = 0;
+        document.addEventListener('touchend', e => {
+            if (!document.body.classList.contains('in-battle') || document.body.classList.contains('is-paused')) { lastTap = 0; return; }
+            if (e.target.closest && e.target.closest('button, input, .overlay')) { lastTap = 0; return; }
+            if (e.changedTouches.length !== 1 || e.touches.length) { lastTap = 0; return; }
+            const now = performance.now();
+            if (lastTap && now - lastTap < 350 && e.cancelable) e.preventDefault();
+            lastTap = now;
+        }, { passive: false });
+        document.addEventListener('gesturestart', e => {
+            if (document.body.classList.contains('in-battle') && !document.body.classList.contains('is-paused') && e.cancelable) e.preventDefault();
+        }, { passive: false });
     }
 
     setupKeyboard() {
