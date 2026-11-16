@@ -476,15 +476,16 @@ body.is-paused #util-bar { z-index: 110; }
 
 /* ─────────────── Orientación ─────────────── */
 #rotate-warn {
-    position: fixed; top: 50%; left: 50%; z-index: 200;
-    transform: translate(-50%, -50%);
-    padding: 8px 14px;
-    background: var(--paper);
-    color: var(--ink);
-    border: 2px solid var(--ink);
-    font-size: 1rem;
-    white-space: nowrap;
+    position: fixed; inset: 0; z-index: 1000; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 10px; padding: 30px;
+    background: #120e10; color: #f8ebdb; text-align: center; touch-action: none;
 }
+#rotate-warn strong { font-family: var(--font-display); font-size: clamp(2.3rem, 9vw, 3.5rem); letter-spacing: .04em; }
+#rotate-warn p { color: #fcb08b; font-size: 1.1rem; }
+#rotate-warn small { max-width: 28em; color: #bda99e; line-height: 1.3; }
+.rotate-icon { font-size: 4.5rem; line-height: 1; color: #f45b2a; }
+.rotate-icon span { font-size: 2.2rem; vertical-align: top; }
+body.orientation-locked #canvas-container { visibility: hidden; }
 
 /* ─────────────── Online ─────────────── */
 .title-actions { display: flex; flex-wrap: wrap; gap: 10px; }
@@ -603,4 +604,31 @@ body.online-mode #roster-p2 { pointer-events: none; }
 @media (prefers-reduced-motion: reduce) {
     .stage-ring-two, .stage-hero, .stage-sparks i { animation: none; }
     .title-button { transition: none; }
+}
+
+/* Selección: tarjetas de combate y ficha del personaje activo. */
+#selection-screen { background: linear-gradient(120deg,rgba(15,12,15,.96),rgba(36,19,18,.92)), url('../assets/menu-arena.jpg') center/cover; }
+.sel-grid { width: min(100%, 1080px); }
+.sel-title { display: flex; align-items: baseline; gap: .65em; color: #f8eee1; letter-spacing: .04em; }
+.sel-title span { font: 700 .58rem var(--font-body); letter-spacing: .14em; color: #ff9b6a; }
+.selection-feature { min-height: 38px; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; padding: 5px 10px; color: #f9ecdf; background: rgba(0,0,0,.38); border-left: 3px solid var(--fighter-color,#ff6a38); }
+.selection-feature strong { font: 400 clamp(1.1rem,3.5vh,1.5rem) var(--font-display); letter-spacing: .05em; }
+.selection-feature span { color: #cdbcb3; font-size: .58rem; letter-spacing: .08em; text-align: right; }
+.selection-feature b { display: block; color: #fff2df; font-size: .7rem; }
+.char-roster { gap: clamp(3px,.7vw,7px); }
+.char-tile { border: 1px solid #726059; background: #272023; box-shadow: none; }
+.tile-art { background-color: #ad9a8b; background-image: radial-gradient(circle at 50% 75%, #d4ae91, #554246); }
+.tile-name { color: #efe6d9; background: #221a1b; padding: 3px 5px; }
+.tile-stats { background: #e8dbca; padding: 4px; }
+.char-tile.selected { transform: translateY(-2px); border-color: var(--tile); box-shadow: 0 0 0 2px var(--tile), 0 4px 14px #0009; }
+.char-tile.selected .tile-name { background: var(--tile); color: #17100e; }
+.char-tile:hover { filter: brightness(1.12); }
+@media (max-height: 480px) and (orientation: landscape) {
+    .selection-feature { min-height: 25px; margin-bottom: 3px; padding: 1px 6px; }
+    .selection-feature strong { font-size: .95rem; }
+    .selection-feature span { font-size: .5rem; }
+    .selection-feature b { font-size: .6rem; }
+    .sel-title { font-size: 1rem; margin-bottom: 2px; }
+    .tile-art { max-height: 27vh; }
+    .combat-hint { font-size: .6rem; }
 }

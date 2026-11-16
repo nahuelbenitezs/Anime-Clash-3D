@@ -101,14 +101,15 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('selection-screen').classList.remove('hidden');
     });
 
-    // ── ORIENTATION HINT ───────────────────────
+    // Los celulares y tabletas necesitan orientación horizontal. La pausa de CPU
+    // es explícita: al volver a horizontal el jugador decide cuándo continuar.
     const rotWarn = document.getElementById('rotate-warn');
     const checkOrientation = () => {
-        const portrait = window.innerHeight > window.innerWidth * 1.1;
+        const portrait = document.body.classList.contains('touch-device') && window.innerHeight > window.innerWidth;
+        if (portrait && !document.body.classList.contains('orientation-locked')) game.input.reset();
         rotWarn.classList.toggle('hidden', !portrait);
-        // Es un aviso, no un bloqueo: en vertical también se puede jugar
-        clearTimeout(rotWarn._timer);
-        if (portrait) rotWarn._timer = setTimeout(() => rotWarn.classList.add('hidden'), 3500);
+        document.body.classList.toggle('orientation-locked', portrait);
+        if (portrait && game.mode === 'cpu' && (game.state === 'fighting' || game.state === 'countdown')) game.togglePause();
     };
     window.addEventListener('resize', checkOrientation);
     window.addEventListener('orientationchange', checkOrientation);
@@ -130,8 +131,16 @@ function statPercents(s) {
 // Marca a un luchador en un roster sin disparar la selección (lo usa el modo online).
 function setRosterSelection(rosterId, type) {
     document.querySelectorAll(`#${rosterId} .char-tile`).forEach(tile => {
-        tile.classList.toggle('selected', tile.dataset.char === type);
+        const active = tile.dataset.char === type;
+        tile.classList.toggle('selected', active);
+        tile.setAttribute('aria-pressed', String(active));
     });
+    const feature = document.getElementById(rosterId === 'roster-p1' ? 'feature-p1' : 'feature-p2');
+    const fighter = FIGHTER_STATS[type];
+    if (feature && fighter) {
+        feature.style.setProperty('--fighter-color', '#' + fighter.aura.toString(16).padStart(6, '0'));
+        feature.innerHTML = `<strong>${fighter.label}</strong><span>DEFINITIVO <b>${fighter.ult.name}</b></span>`;
+    }
 }
 window.setRosterSelection = setRosterSelection;
 
@@ -143,17 +152,19 @@ function buildRoster(rosterId, selected, onChange) {
         const tile = document.createElement('button');
         tile.className = 'char-tile' + (type === selected ? ' selected' : '');
         tile.dataset.char = type;
+        tile.setAttribute('aria-label', s.label);
+        tile.setAttribute('aria-pressed', String(type === selected));
         tile.style.setProperty('--tile', '#' + s.aura.toString(16).padStart(6, '0'));
         const stats = statPercents(s).map(([k, v]) => `<span class="stat-row">${k}<b style="--pct:${v}%"></b></span>`).join('');
         tile.innerHTML = `<div class="tile-art" style="background-image:url(${window.portraits[type]})"></div>
             <div class="tile-name">${s.label}</div>
             <div class="tile-stats">${stats}</div>`;
         tile.addEventListener('click', () => {
-            roster.querySelectorAll('.char-tile').forEach(t => t.classList.remove('selected'));
-            tile.classList.add('selected');
+            setRosterSelection(rosterId, type);
             onChange(type);
             window.buzz(18);
         });
         roster.appendChild(tile);
     });
+    setRosterSelection(rosterId, selected);
 }

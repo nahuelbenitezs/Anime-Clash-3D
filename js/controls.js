@@ -49,6 +49,7 @@ class InputManager {
         window.addEventListener('keydown', (e) => {
             const key = e.key.toLowerCase();
             if (gameKeys.has(key)) e.preventDefault();
+            if (document.body.classList.contains('orientation-locked')) return;
             if (!e.repeat && keyAction[key]) this.latched[keyAction[key]] = true;
             this.keys[key] = true;
             this.updateKeyboardInput();
@@ -96,6 +97,17 @@ class InputManager {
 
     wants(action) {
         return this.actions[action] || !!this.latched[action];
+    }
+
+    reset() {
+        this.keys = {};
+        this.latched = {};
+        this.joystickTouchId = null;
+        this.moveVector.x = this.moveVector.z = 0;
+        Object.keys(this.actions).forEach(action => { this.actions[action] = false; });
+        const knob = document.getElementById('joystick-knob');
+        if (knob) knob.style.transform = 'translate(0px, 0px)';
+        document.querySelectorAll('#touch-controls .active').forEach(button => button.classList.remove('active'));
     }
 
     endFrame() {

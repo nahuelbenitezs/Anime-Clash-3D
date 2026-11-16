@@ -1154,14 +1154,46 @@ class Fighter {
         return true;
     }
 
-    resolveHit({ step, target }) {
+    // Golpe de impacto: guardia + golpe, con más preparación y empuje.
+    smash(target) {
+        if (!target || !this.canAct() || this.attackCd > 0 || this.ki < 15) return false;
+        this.ki -= 15;
+        this.setAnimation('attack');
+        this.stateTimer = 0;
+        this.animStep = 2;
+        this.comboStep = 0;
+        this.comboWindow = 0;
+        this.attackCd = 0.85 / this.stats.attackRate;
+        this.pendingHit = { t: 0.2, step: 2, target, smash: true };
+        const dir = this.aimAt(target);
+        this.velocity.addScaledVector(dir, 3);
+        return true;
+    }
+
+    // Contraataque durante el aturdimiento, disponible también para ambos jugadores online.
+    revenge(target) {
+        if (this.isDead || this.state !== 'hurt' || !target || target.isDead || this.ki < 30 ||
+            target.dashInvuln > 0 || target.invuln > 0 || this.position.distanceTo(target.position) > 3.2) return false;
+        this.ki -= 30;
+        this.setAnimation('idle');
+        this.invuln = 0.25;
+        const dealt = target.receiveHit({ amount: 8 * this.stats.power, attacker: this, kind: 'melee' });
+        if (dealt > 0 && this.events.onHit) this.events.onHit(this, target, dealt, { heavy: false, kind: 'melee' });
+        if (this.events.onRevenge) this.events.onRevenge(this);
+        this.vfx.createHitSparks(target.position.clone().add(new THREE.Vector3(0, target.stats.muzzleY, 0)), this.auraColor, 18);
+        this.vfx.shake(.25);
+        window.soundManager.playPunch(true);
+        return true;
+    }
+
+    resolveHit({ step, target, smash = false }) {
         const dist = this.position.distanceTo(target.position);
         window.soundManager.playPunch(step === 2);
         if (dist > this.stats.reach || target.isDead) return;
 
         const heavy = step === 2;
-        const damage = [5, 6, 10][step] * this.stats.power * (this.sparking ? 1.15 : 1);
-        const dealt = target.receiveHit({ amount: damage, attacker: this, heavy, kind: 'melee' });
+        const damage = (smash ? 16 : [5, 6, 10][step]) * this.stats.power * (this.sparking ? 1.15 : 1);
+        const dealt = target.receiveHit({ amount: damage, attacker: this, heavy, kind: 'melee', smash });
         if (dealt <= 0) return;
 
         const spark = target.position.clone();
@@ -1304,7 +1336,7 @@ class Fighter {
     // ─────────────────────────────────────────────
     // Devuelve el daño aplicado (0 si esquivó). `continuous` son los rayos, que
     // pegan por tick y no generan aturdimiento ni invulnerabilidad.
-    receiveHit({ amount, attacker, heavy = false, kind = 'melee', continuous = false }) {
+    receiveHit({ amount, attacker, heavy = false, kind = 'melee', continuous = false, smash = false }) {
         if (this.isDead || this.dashInvuln > 0) return 0;
         if (this.invuln > 0 && !continuous) return 0;
 
@@ -1350,7 +1382,7 @@ class Fighter {
             this.setAnimation('hurt');
             this.stateTimer = 0;
             this.hurtDuration = heavy ? 0.5 : 0.26;
-            this.velocity.addScaledVector(pushDir, heavy ? 15 : 4);
+            this.velocity.addScaledVector(pushDir, smash ? 21 : heavy ? 15 : 4);
             // Tras el golpe final hay un respiro para que no existan combos infinitos
             this.invuln = heavy ? 0.7 : 0;
         } else if (continuous) {

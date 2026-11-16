@@ -31,6 +31,7 @@ class Arena {
         this.buildSky();
         this.buildHills();
         this.buildRing();
+        this.buildRuins();
     }
 
     buildSky() {
@@ -153,6 +154,23 @@ class Arena {
             ctx.beginPath();
             ctx.ellipse(w / 2, h / 2, w * 0.13, w * 0.13, 0, 0.2, Math.PI * 1.92);
             ctx.stroke();
+            // Anillos de combate y marcas de impacto, pintados en la piedra.
+            ctx.save();
+            ctx.translate(w / 2, h / 2);
+            ctx.strokeStyle = 'rgba(74,35,26,.5)';
+            ctx.lineWidth = 3;
+            for (const radius of [0.17, 0.23, 0.29]) {
+                ctx.beginPath(); ctx.arc(0, 0, w * radius, 0, Math.PI * 2); ctx.stroke();
+            }
+            ctx.strokeStyle = 'rgba(239,111,44,.55)';
+            ctx.lineWidth = 3;
+            for (let i = 0; i < 20; i++) {
+                const angle = i * Math.PI / 10;
+                const r1 = w * 0.232, r2 = w * (i % 5 === 0 ? 0.28 : 0.255);
+                ctx.beginPath(); ctx.moveTo(Math.cos(angle) * r1, Math.sin(angle) * r1);
+                ctx.lineTo(Math.cos(angle) * r2, Math.sin(angle) * r2); ctx.stroke();
+            }
+            ctx.restore();
             // Borde del ring
             ctx.lineWidth = 14;
             ctx.strokeRect(7, 7, w - 14, h - 14);
@@ -201,6 +219,32 @@ class Arena {
             this.scene.add(lamp);
         });
     }
+    // Ruinas y rocas al fondo: la silueta enmarca el combate sin ocupar el ring.
+    buildRuins() {
+        const stone = new THREE.MeshToonMaterial({ color: window.inkColor(0x654332), gradientMap: window.toonRamp() });
+        const dark = new THREE.MeshToonMaterial({ color: window.inkColor(0x3c2926), gradientMap: window.toonRamp() });
+        const glow = new THREE.MeshBasicMaterial({ color: window.inkColor(0xffa356) });
+        const column = new THREE.BoxGeometry(1.35, 7, 1.35);
+        const cap = new THREE.BoxGeometry(1.9, .45, 1.9);
+        [[-18,-20,6.5],[-13.8,-25,4.6],[14,-24,5.2],[19,-19,7.4]].forEach(([x,z,h], i) => {
+            const p = new THREE.Mesh(column, stone); p.scale.y = h / 7; p.position.set(x,h / 2 - 1.4,z);
+            p.rotation.z = (i % 2 ? 1 : -1) * .06; this.scene.add(p);
+            const top = new THREE.Mesh(cap,dark); top.position.set(x,h - 1.35,z); top.rotation.z = p.rotation.z; this.scene.add(top);
+            const band = new THREE.Mesh(new THREE.BoxGeometry(1.4,.08,1.4),glow); band.position.set(x,h * .55 - 1.4,z); this.scene.add(band);
+        });
+        const random = seededRandom(982);
+        const rockGeometry = new THREE.DodecahedronGeometry(1, 0);
+        for (let i = 0; i < 18; i++) {
+            const rock = new THREE.Mesh(rockGeometry, i % 3 ? stone : dark);
+            const side = i % 2 ? 1 : -1;
+            rock.position.set(side * (13 + random() * 16), .5 + random() * 12, -22 - random() * 22);
+            const size = .35 + random() * 1.5;
+            rock.scale.set(size * 1.4, size * .55, size);
+            rock.rotation.set(random() * 2, random() * 2, random() * 2);
+            this.scene.add(rock);
+        }
+    }
+
 }
 
 window.Arena = Arena;

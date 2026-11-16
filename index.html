@@ -103,12 +103,14 @@
 <div id="selection-screen" class="overlay hidden">
     <div class="sel-grid">
         <section class="sel-col">
-            <h2 class="sel-title">VOS</h2>
+            <h2 class="sel-title"><span>01 / JUGADOR</span> ELEGÍ TU LUCHADOR</h2>
+            <div class="selection-feature" id="feature-p1" aria-live="polite"></div>
             <div class="char-roster" id="roster-p1"></div>
         </section>
         <div class="sel-vs" aria-hidden="true">VS</div>
         <section class="sel-col">
-            <h2 class="sel-title" id="sel-title-rival">CPU</h2>
+            <h2 class="sel-title" id="sel-title-rival">02 / RIVAL</h2>
+            <div class="selection-feature" id="feature-p2" aria-live="polite"></div>
             <div class="char-roster" id="roster-p2"></div>
         </section>
     </div>
@@ -120,7 +122,7 @@
         </div>
         <button id="btn-selection-back" class="ink-btn selection-back">VOLVER</button>
         <button id="btn-start-fight" class="ink-btn primary">A PELEAR</button>
-        <p class="combat-hint">Cargar + esquivar: persecución · Guardia + esquivar: desaparecer · Guardia precisa: contra · Cargá con ki lleno: máximo poder</p>
+        <p class="combat-hint">Cargar + esquivar: persecución · Guardia + esquivar: desaparecer · Guardia + golpe: impacto / contraataque · Cargá con ki lleno: máximo poder</p>
         <p class="pc-hint desktop-only"><kbd>WASD</kbd> mover <kbd>J</kbd> golpe <kbd>K</kbd> ráfaga <kbd>L</kbd> cargar <kbd>U</kbd> definitivo <kbd>I</kbd> guardia <kbd>Espacio</kbd> esquivar</p>
     </div>
 </div>
@@ -213,7 +215,7 @@
 </div>
 
 <!-- ═══════════════ ORIENTATION ═══════════════ -->
-<div id="rotate-warn" class="hidden">Girá el celular para jugar mejor</div>
+<div id="rotate-warn" class="hidden" role="status"><div class="rotate-icon" aria-hidden="true">▱ <span>↻</span></div><strong>GIRÁ TU CELULAR</strong><p>Este juego se juega en horizontal.</p><small>En una pelea online, el combate continúa mientras girás el dispositivo.</small></div>
 
 <!-- ═══════════════ SCRIPTS ═══════════════ -->
 <script src="js/audio.js"></script>

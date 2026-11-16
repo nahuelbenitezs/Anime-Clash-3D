@@ -120,12 +120,18 @@ function humanPose(f, t, c) {
             p.legR = [s * 0.75 - 0.05, 0, 0];  p.shinR = [Math.max(0, -s) * 0.9, 0, 0];
             p.armL = [s * 0.6, 0, 0];  p.armR = [-s * 0.6, 0, 0];
             p.spine = [0.22, s * 0.12, 0];
+            p.chest = [-0.08, -s * 0.12, 0];
+            p.head = [-0.08, s * 0.05, 0];
+            if (f.type === 'naruto') {
+                p.armL = [1.05, 0, 0.18]; p.armR = [1.05, 0, -0.18];
+                p.spine = [0.48, s * 0.06, 0];
+            }
             h.y = Math.abs(sin(c * 13)) * 0.09;
             break;
         }
         case 'attack': {
             const step = f.animStep;
-            const wind = t < 0.06;
+            const wind = t < (f.pendingHit && f.pendingHit.smash ? 0.16 : 0.06);
             if (step === 0) {
                 p.chest = [0.1, wind ? -0.5 : 0.7, 0];
                 p.armR = wind ? [0.5, 0, 0] : [-1.25, -0.2, 0];
@@ -218,8 +224,10 @@ function humanPose(f, t, c) {
         }
         default: { // idle
             p.chest = [0.02 + breath * 0.02, 0, 0];
-            p.armL = [breath * 0.03, 0, 0];
+            p.armL = [breath * 0.03 - (f.type === 'tanjiro' ? 0.15 : 0), 0, 0];
             p.armR = [-breath * 0.03, 0, 0];
+            p.head = [breath * 0.015, 0, -breath * 0.012];
+            p.legL = [0.04, 0, 0.04]; p.legR = [-0.04, 0, -0.04];
             h.y = breath * 0.012;
         }
     }
@@ -248,7 +256,7 @@ function pikachuPose(f, t, c) {
         }
         case 'attack': {
             const step = f.animStep;
-            const wind = t < 0.06;
+            const wind = t < (f.pendingHit && f.pendingHit.smash ? 0.16 : 0.06);
             if (step === 2) {
                 // Coletazo girando sobre sí mismo
                 h.ry = Math.min(1, t / 0.2) * PI * 2;
@@ -344,7 +352,7 @@ function charizardPose(f, t, c) {
         }
         case 'attack': {
             const step = f.animStep;
-            const wind = t < 0.07;
+            const wind = t < (f.pendingHit && f.pendingHit.smash ? 0.16 : 0.07);
             if (step === 2) {
                 // Coletazo: gira con todo el cuerpo
                 h.ry = Math.min(1, t / 0.24) * PI * 2;

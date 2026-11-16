@@ -294,6 +294,7 @@ class Game {
             onBlock: (f, perfect) => { window.soundManager.playPunch(false); this.spawnLabel(f.position, perfect ? '¡CONTRA!' : 'BLOQUEO'); },
             onSparking: (f) => this.spawnLabel(f.position, '¡MÁXIMO PODER!'),
             onVanish: (f) => this.spawnLabel(f.position, '¡DESAPARICIÓN!'),
+            onRevenge: (f) => this.spawnLabel(f.position, '¡CONTRAATAQUE!'),
             onUltimate: (f) => {
                 if (f === this.player) this.stats.playerUltimates++;
                 else this.rivalStats.ults++;
@@ -450,7 +451,12 @@ class Game {
         }
         if (input.wants('ultimate')) p.triggerUltimate(foe);
         if (input.wants('blast')) p.shootBlast(foe);
-        if (input.wants('attack')) p.attack(foe);
+        if (input.wants('attack')) {
+            if (input.wants('guard')) {
+                if (p.state === 'hurt') p.revenge(foe);
+                else p.smash(foe);
+            } else p.attack(foe);
+        }
         p.move(mv.x, mv.z, dt);
     }
 

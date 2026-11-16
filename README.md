@@ -23,6 +23,8 @@ Peleás contra la CPU al mejor de tres rondas, de 60 segundos cada una. Gana la 
 
 Algunos consejos:
 
+- **Impacto:** mantené guardia y pulsá golpe para lanzar un ataque fuerte que cuesta 15 de ki.
+- **Contraataque:** mientras recibís golpes, usá guardia + golpe cerca del rival para escapar y responder; cuesta 30 de ki.
 - **Persecución:** mantené cargar ki y pulsá esquivar para avanzar hacia el rival; cuesta 15 de ki.
 - **Desaparición:** mantené guardia y pulsá esquivar para aparecer detrás del rival; cuesta 25 de ki y necesita espacio. La guardia solo protege desde el frente.
 - **Contra:** activá la guardia justo antes de un golpe cuerpo a cuerpo frontal para interrumpir al atacante.
@@ -86,7 +88,7 @@ Pruebas realizadas con el roster original de cuatro luchadores, antes de agregar
 | --- | --- |
 | Pelea completa con cada luchador, teclado, 1000×600 | 4 de 4 hasta la pantalla de victoria, sin errores en consola |
 | Pelea completa con cada luchador, táctil, 740×360 con el celular emulado | 4 de 4 hasta la pantalla de victoria |
-| Formato vertical, 375×812 | Selección y pelea se ven completas |
+| Formato vertical, 375×812 | Se solicita girar el dispositivo para jugar |
 | Online con dos pestañas de la misma compu | Conexión, selección, pelea completa, revancha y aviso de desconexión |
 | Equilibrio: 120 peleas de CPU contra CPU, nivel normal | Goku 26-34, Vegeta 34-26, Pikachu 27-33, Charizard 33-27 |
 | Dificultad: CPU en normal contra CPU en otro nivel | Gana normal 36-0 a fácil; pierde 1-35 contra difícil |
@@ -95,7 +97,8 @@ Pruebas realizadas con el roster original de cuatro luchadores, antes de agregar
 
 - **Las nuevas mecánicas en una pelea real y el zoom en celulares reales.** Falta validar la sensación de juego, el equilibrio y el comportamiento en distintos navegadores.
 - **Los personajes nuevos en el navegador.** Falta verificar visualmente las poses, el rendimiento y el equilibrio de Naruto, Tanjiro y el nuevo Vegeta.
-- **Un celular real.** Ni el tacto real, ni el rendimiento, ni la temperatura, ni la batería. El emulador solo comprueba el tamaño de pantalla y los eventos táctiles.
+- **Un celular real.** El juego exige orientación horizontal en dispositivos táctiles; falta comprobar la detección y el rendimiento en distintos modelos.
+- **Rendimiento y controles táctiles reales.** Ni el tacto real, ni el rendimiento, ni la temperatura, ni la batería. El emulador solo comprueba el tamaño de pantalla y los eventos táctiles.
 - **Online entre dos redes distintas.** Las pestañas de la prueba comparten red, y las redes reales pueden bloquear la conexión directa o agregar retraso.
 - **El sonido de oído.** Se comprobó que el audio se activa sin errores, no cómo suena.
 - **Una persona jugando.** El equilibrio y la dificultad se midieron con bots, así que pueden sentirse distintos en la mano.

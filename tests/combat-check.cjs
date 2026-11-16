@@ -5,10 +5,15 @@ function fighter(x){let f=Object.create(Fighter.prototype);Object.assign(f,{type
 let a=fighter(-4),b=fighter(4);a.ki=14;assert.equal(a.rush(b),false);assert.equal(a.ki,14);a.ki=50;assert.equal(a.rush(b),true);assert.equal(a.ki,35);let start=a.position.x;a.update(.1,b);assert(a.position.x>start);assert.equal(a.dragonDash,true);
 a=fighter(-1);b=fighter(1);b.guard(true);a.setAnimation('attack');let hp=b.health;assert.equal(b.receiveHit({amount:10,attacker:a,kind:'melee'}),0);assert.equal(b.health,hp);assert.equal(a.state,'hurt');b.guard(false);b.guard(true);b.perfectGuard=0;assert(b.receiveHit({amount:10,attacker:a,kind:'melee'})>0);
 a=fighter(-4);b=fighter(4);a.ki=100;a.chargeKi(true);for(let i=0;i<11;i++){a.chargeKi(true);a.update(.1,b)} assert.equal(a.sparking,true);let energy=a.ki;a.update(.2,b);assert(a.ki<energy);let data=packFighter(a);assert.equal(data[9],1);let guest=fighter(-4);guest.setNetTarget(data,NET_STATES);assert.equal(guest.sparking,true);a.ki=.5;a.update(.1,b);assert.equal(a.sparking,false);
-console.log('OK: persecuci贸n, coste, contra, guardia normal, m谩ximo poder, consumo y sincronizaci贸n');
+console.log('OK: persecucion, coste, contra, guardia, maximo poder y sincronizacion');
 
 a=fighter(-4);b=fighter(2);a.ki=30;assert(a.vanish(b));assert.equal(a.ki,5);assert(Math.abs(a.position.x-(b.position.x+1.5))<1e-8);assert.equal(a.dashCd,a.stats.dashCooldown);
 a=fighter(-4);b=fighter(10.5);b.rotationY=-Math.PI/2;a.ki=30;assert.equal(a.vanish(b),false);assert.equal(a.ki,30);
 a=fighter(-1);b=fighter(1);b.rotationY=Math.PI/2;b.guard(true);assert.equal(b.receiveHit({amount:10,attacker:a,kind:'melee'}),10);
 a=fighter(-4);b=fighter(4);a.ki=100;a.chargeKi(true);a.update(.6,b);a.chargeKi(false);assert.equal(a.sparkingCharge,0);a.chargeKi(true);a.update(.6,b);assert.equal(a.sparking,false);
-console.log('OK: desaparici髇, l韒ites de arena, golpes por la espalda e interrupci髇 de carga');
+console.log('OK: desaparici贸n, l铆mites de arena, golpes por la espalda e interrupci贸n de carga');
+
+a=fighter(-1);b=fighter(1);a.ki=14;assert.equal(a.smash(b),false);a.ki=50;assert(a.smash(b));assert.equal(a.ki,35);assert.equal(a.pendingHit.smash,true);a.update(.21,b);assert(b.health<135);assert(b.velocity.x>0);
+a=fighter(-1);b=fighter(1);a.state='hurt';a.ki=29;assert.equal(a.revenge(b),false);a.ki=40;assert(a.revenge(b));assert.equal(a.ki,10);assert(b.health<150);assert.equal(a.state,'idle');
+for(const type of ['goku','vegeta','naruto','tanjiro','pikachu','charizard']) for(const state of ['idle','run','attack','blast','guard','charge','ultimate','hurt','dash','ko']) {const f=fighter(-1);f.type=type;f.state=state;f.animStep=0;let result=POSE_FN[type](f,.1,1);for(const angles of Object.values(result.pose)) assert(angles.every(Number.isFinite));}
+console.log('OK: impacto, contraataque y poses de los seis luchadores');
