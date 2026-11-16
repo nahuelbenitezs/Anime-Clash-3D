@@ -49,15 +49,32 @@
 <!-- ═══════════════ TITLE / MENU SCREEN ═══════════════ -->
 <div id="title-screen" class="overlay title-layout hidden">
     <div class="title-art" aria-hidden="true"></div>
-    <div class="title-block">
-        <h1 class="logo">ANIME CLASH <span>3D</span></h1>
-        <p class="title-hint">Juego de peleas. Vos contra la CPU, al mejor de tres rondas.</p>
-        <div class="title-actions">
-            <button id="btn-play" class="ink-btn primary">JUGAR</button>
-            <button id="btn-online" class="ink-btn">ONLINE</button>
+    <div class="title-grain" aria-hidden="true"></div>
+    <header class="title-topbar">
+        <span class="title-brand"><span class="brand-mark" aria-hidden="true">✦</span> ANIME CLASH <b>3D</b></span>
+        <span class="title-edition">ARENA DE COMBATE <i></i> PROYECTO DE FANS</span>
+    </header>
+    <main class="title-main">
+        <div class="title-block">
+            <div class="title-kicker"><span></span> EL COMBATE COMIENZA ACÁ</div>
+            <h1 class="title-logo"><span>ANIME</span><strong>CLASH<span class="title-3d">3D</span></strong></h1>
+            <p class="title-hint">Distintos mundos.<br><em>Una sola arena.</em></p>
+            <p class="title-description">Elegí a tu luchador, dominá tu poder y entrá en combate.</p>
+            <div class="title-actions">
+                <button id="btn-play" class="title-button title-button-primary"><span class="title-button-index">01</span><span class="title-button-copy"><strong>JUGAR</strong><small>Enfrentate a la CPU</small></span><span class="title-button-arrow" aria-hidden="true">↗</span></button>
+                <button id="btn-online" class="title-button title-button-secondary"><span class="title-button-index">02</span><span class="title-button-copy"><strong>ONLINE</strong><small>Desafiá a un amigo</small></span><span class="title-button-arrow" aria-hidden="true">↗</span></button>
+            </div>
         </div>
-        <p class="title-legal">Proyecto de fans sin fines de lucro. No es un producto oficial. Los personajes pertenecen a sus dueños.</p>
-    </div>
+        <div class="title-stage" aria-hidden="true">
+            <div class="stage-halo"></div><div class="stage-ring stage-ring-one"></div><div class="stage-ring stage-ring-two"></div>
+            <div class="stage-sparks"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+            <div class="stage-tag"><span>ELIGE TU DESTINO</span><b>闘</b></div>
+            <div class="stage-portrait stage-rival" id="title-rival"></div>
+            <div class="stage-portrait stage-hero" id="title-hero"></div>
+            <div class="stage-caption"><span>COMBATE 3D</span><strong>LA ARENA TE ESPERA</strong><span>✦</span></div>
+        </div>
+    </main>
+    <footer class="title-footer"><div class="title-footer-left"><span class="footer-dot"></span> 6 LUCHADORES <span class="footer-divider">/</span> 1 VS 1 <span class="footer-divider">/</span> CPU + ONLINE</div><p class="title-legal">Proyecto de fans sin fines de lucro · Personajes de sus respectivos dueños</p></footer>
 </div>
 
 <!-- ═══════════════ ONLINE ═══════════════ -->
@@ -101,6 +118,7 @@
             <button class="diff-btn selected" data-level="normal" role="radio">NORMAL</button>
             <button class="diff-btn" data-level="hard" role="radio">DIFÍCIL</button>
         </div>
+        <button id="btn-selection-back" class="ink-btn selection-back">VOLVER</button>
         <button id="btn-start-fight" class="ink-btn primary">A PELEAR</button>
         <p class="combat-hint">Cargar + esquivar: persecución · Guardia + esquivar: desaparecer · Guardia precisa: contra · Cargá con ki lleno: máximo poder</p>
         <p class="pc-hint desktop-only"><kbd>WASD</kbd> mover <kbd>J</kbd> golpe <kbd>K</kbd> ráfaga <kbd>L</kbd> cargar <kbd>U</kbd> definitivo <kbd>I</kbd> guardia <kbd>Espacio</kbd> esquivar</p>

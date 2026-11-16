@@ -19,6 +19,9 @@ function runLoadingScreen(onComplete) {
         bar.style.width = Math.round(progress * 100) + '%';
     }).then(() => {
         window.portraits = window.makePortraits(Object.keys(FIGHTER_STATS));
+        // No ampliamos los modelos de respaldo si falló la descarga de un GLB.
+        if (window.modelLoader.cache.goku) document.getElementById('title-hero').style.backgroundImage = `url(${window.portraits.goku})`;
+        if (window.modelLoader.cache.vegeta) document.getElementById('title-rival').style.backgroundImage = `url(${window.portraits.vegeta})`;
         bar.style.width = '100%';
         text.textContent = '¡Listo!';
         setTimeout(onComplete, 250);
@@ -54,15 +57,20 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         buildRoster('roster-p2', selectedEnemy, (char) => { selectedEnemy = char; });
         game.showTitleBackdrop();
-        game.online.joinFromUrl();
         document.getElementById('loading-screen').classList.add('hidden');
         document.getElementById('title-screen').classList.remove('hidden');
+        game.online.joinFromUrl();
     });
 
     // ── TITLE SCREEN ───────────────────────────
     document.getElementById('btn-play').addEventListener('click', () => {
         document.getElementById('title-screen').classList.add('hidden');
         document.getElementById('selection-screen').classList.remove('hidden');
+    });
+
+    document.getElementById('btn-selection-back').addEventListener('click', () => {
+        document.getElementById('selection-screen').classList.add('hidden');
+        document.getElementById('title-screen').classList.remove('hidden');
     });
 
     // ── CHARACTER SELECTION ────────────────────
