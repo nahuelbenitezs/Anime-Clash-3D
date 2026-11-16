@@ -13,6 +13,21 @@ const BONE_MAPS = {
         armL: 'upper_armL', foreL: 'lower_armL', armR: 'upper_armR', foreR: 'lower_armR',
         legL: 'upper_legL', shinL: 'lower_legL', legR: 'upper_legR', shinR: 'lower_legR',
     },
+    naruto: {
+        spine: 'Spine02_', chest: 'Spine01_', neck: 'neck_', head: 'Head_',
+        armL: 'LeftArm_', foreL: 'LeftForeArm_', armR: 'RightArm_', foreR: 'RightForeArm_',
+        legL: 'LeftUpLeg_', shinL: 'LeftLeg_', legR: 'RightUpLeg_', shinR: 'RightLeg_',
+    },
+    vegeta: {
+        spine: 'mixamorigSpine_', chest: 'mixamorigSpine2_', neck: 'mixamorigNeck_', head: 'mixamorigHead_',
+        armL: 'mixamorigLeftArm_', foreL: 'mixamorigLeftForeArm_', armR: 'mixamorigRightArm_', foreR: 'mixamorigRightForeArm_',
+        legL: 'mixamorigLeftUpLeg_', shinL: 'mixamorigLeftLeg_', legR: 'mixamorigRightUpLeg_', shinR: 'mixamorigRightLeg_',
+    },
+    tanjiro: {
+        spine: 'C_Spine_1', chest: 'C_Spine_3', neck: 'C_Neck_1', head: 'C_Head_1',
+        armL: 'L_UpperArm_1', foreL: 'L_Forearm_1', armR: 'R_UpperArm_1', foreR: 'R_Forearm_1',
+        legL: 'L_Thigh_1', shinL: 'L_Knee_1', legR: 'R_Thigh_1', shinR: 'R_Knee_1',
+    },
     pikachu: {
         spine: 'Spine1_', chest: 'Spine2_', head: 'Head_',
         armL: 'LArm_', foreL: 'LForeArm_', armR: 'RArm_', foreR: 'RForeArm_',
@@ -411,7 +426,7 @@ function charizardPose(f, t, c) {
     return { pose: p, body: h };
 }
 
-const POSE_FN = { goku: humanPose, vegeta: humanPose, pikachu: pikachuPose, charizard: charizardPose };
+const POSE_FN = { goku: humanPose, vegeta: humanPose, naruto: humanPose, tanjiro: humanPose, pikachu: pikachuPose, charizard: charizardPose };
 
 // Velocidad con la que se llega a cada pose: los golpes son secos, el reposo es suave.
 const POSE_RATE = { attack: 34, blast: 30, dash: 26, hurt: 28, guard: 22, ultimate: 16, charge: 12, run: 14, ko: 7, idle: 9 };

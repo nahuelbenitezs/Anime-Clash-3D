@@ -2,6 +2,8 @@
 // Reemplazan a los emoji de la selección, el HUD, la viñeta y la pantalla final.
 const PORTRAIT_FRAME = {
     goku: { x: 0, y: 1.5, dist: 2.2, turn: 0.45 },
+    naruto: { x: 0, y: 1.5, dist: 2.2, turn: 0.4 },
+    tanjiro: { x: 0, y: 1.5, dist: 2.2, turn: 0.4 },
     vegeta: { x: 0, y: 1.66, dist: 2.2, turn: 0.4 },
     pikachu: { x: 0, y: 0.95, dist: 2.3, turn: 0.3 },
     charizard: { x: -0.1, y: 2.3, dist: 4.4, turn: 0.1 },

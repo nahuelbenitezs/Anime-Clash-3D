@@ -44,6 +44,8 @@ La conexión es directa entre los dos navegadores. El servicio público y gratui
 | --- | --- | --- | --- |
 | Goku | 150 | Equilibrado | Kamehameha: rayo largo |
 | Vegeta | 144 | Agresivo, golpea más fuerte | Final Flash: rayo ancho y de carga lenta |
+| Naruto | 140 | Rápido y equilibrado | Rasengan: ataque de energía |
+| Tanjiro | 138 | Ágil, mayor alcance | Respiración del agua: ataque de energía |
 | Pikachu | 122 | Rápido, cuerpo chico y ki barato | Impactrueno: rayo eléctrico fino y de carga rápida |
 | Charizard | 152 | Pesado, más alcance | Lanzallamas: llamarada corta y ancha |
 
@@ -62,7 +64,7 @@ Después abrí <http://localhost:8000>.
 ## Cómo está hecho
 
 - **Three.js r128 sin compiladores:** JavaScript directo, servido por GitHub Pages. Three.js y Draco están en `vendor/` para que el juego no dependa de otros servidores.
-- **Un solo sistema de animación:** cada modelo queda fijo en una pose base y [`js/rig.js`](js/rig.js) lo anima por huesos, con poses escritas en los ejes del personaje. Así los cuatro tienen el mismo set de movimientos, aunque cada esqueleto sea distinto.
+- **Un solo sistema de animación:** cada modelo queda fijo en una pose base y [`js/rig.js`](js/rig.js) lo anima por huesos, con poses escritas en los ejes del personaje. Así los seis tienen el mismo set de movimientos, aunque cada esqueleto sea distinto.
 - **Online sin servidor propio:** [`js/online.js`](js/online.js) conecta dos navegadores con WebRTC. El anfitrión simula la pelea y envía el estado 20 veces por segundo; el invitado manda sus toques y dibuja lo que recibe.
 - **Lógica separada del dibujo:** toda la pelea corre en `Game.step(dt)`. Por eso la pausa detiene el tiempo de verdad y se pueden simular cientos de peleas en segundos.
 - **Equilibrio medido:** los números de [`js/roster.js`](js/roster.js) se ajustaron simulando peleas de CPU contra CPU entre todos los luchadores.
@@ -74,7 +76,7 @@ Goku aparecía con los brazos y las piernas deformados. No era la animación: lo
 
 ## Qué se probó y qué no
 
-Probado en el navegador de escritorio, con un bot que juega enviando eventos reales de teclado y táctiles:
+Pruebas realizadas con el roster original de cuatro luchadores, antes de agregar Naruto y Tanjiro y sustituir el modelo de Vegeta:
 
 | Prueba | Resultado |
 | --- | --- |
@@ -87,6 +89,7 @@ Probado en el navegador de escritorio, con un bot que juega enviando eventos rea
 
 **Sin probar todavía:**
 
+- **Los personajes nuevos en el navegador.** Falta verificar visualmente las poses, el rendimiento y el equilibrio de Naruto, Tanjiro y el nuevo Vegeta.
 - **Un celular real.** Ni el tacto real, ni el rendimiento, ni la temperatura, ni la batería. El emulador solo comprueba el tamaño de pantalla y los eventos táctiles.
 - **Online entre dos redes distintas.** Las pestañas de la prueba comparten red, y las redes reales pueden bloquear la conexión directa o agregar retraso.
 - **El sonido de oído.** Se comprobó que el audio se activa sin errores, no cómo suena.
@@ -95,6 +98,7 @@ Probado en el navegador de escritorio, con un bot que juega enviando eventos rea
 ## Créditos
 
 - Modelos 3D de Goku, Pikachu y Charizard: obtenidos de terceros, sin autoría registrada en este repositorio.
-- Vegeta, arena, efectos, música y sonidos: generados por código en este proyecto.
+- [Naruto Walking](https://sketchfab.com/3d-models/naruto-walking-3d-animation-by-sg-studio-505860183544421a898c132d09dcd2b7), de Nytherix (SG Studio); [Vegeta](https://sketchfab.com/3d-models/vegeta-d43230bed9964b9aaa7671b752e8d608), de Muhammad; y [Tanjiro Kamado](https://sketchfab.com/3d-models/tanjiro-kamado-from-demon-slayer-fully-rigged-0ab5b317b7654fd29255d22182537ded), de Light.k: [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Adaptados para el juego.
+- Modelo de respaldo de Vegeta, arena, efectos, música y sonidos: generados por código en este proyecto.
 - [Three.js](https://threejs.org) y [PeerJS](https://peerjs.com), con licencia MIT.
 - Tipografías [Bangers](https://fonts.google.com/specimen/Bangers) y [Rajdhani](https://fonts.google.com/specimen/Rajdhani), desde Google Fonts.

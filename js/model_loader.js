@@ -38,7 +38,10 @@ const OUTLINE_WIDTH = { pikachu: 0.012, charizard: 0.016 };
 class ModelLoader {
     constructor() {
         this.basePose = {
-            goku: { clip: '02-STANCE', time: 1, flip: true },
+            goku: { clip: '02-STANCE', time: 1, yaw: -0.80 },
+            naruto: { clip: 'Armature|Armature|walking_man|baselayer', time: 0 },
+            vegeta: { clip: 'Armature|Armature.001|mixamo.com|Layer0', time: 0 },
+            tanjiro: {},
             pikachu: { clip: 'Impactrueno', time: 2.2 },
             charizard: { clip: 'Chariard_dizzy', time: 0 },
         };
@@ -120,9 +123,10 @@ class ModelLoader {
                 return;
             }
             mesh.material = new THREE.MeshToonMaterial({
-                map: old.map, color: 0xffffff, gradientMap: window.toonRamp(),
+                map: old.map, color: old.color ? old.color.clone() : 0xffffff, gradientMap: window.toonRamp(),
                 skinning: !!mesh.isSkinnedMesh, morphTargets: old.morphTargets,
-                transparent: old.transparent, alphaTest: old.alphaTest, side: old.side,
+                transparent: old.transparent, opacity: old.opacity, alphaTest: old.alphaTest, side: old.side,
+                depthWrite: old.depthWrite, vertexColors: old.vertexColors,
             });
             if (old.map) old.map.anisotropy = 2;
         });

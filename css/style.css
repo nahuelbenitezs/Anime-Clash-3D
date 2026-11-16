@@ -135,7 +135,7 @@ h1, h2 { font-weight: 400; }
     color: var(--accent);
     text-shadow: 2px 2px 0 var(--ink);
 }
-.char-roster { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: clamp(3px, 0.8vw, 8px); }
+.char-roster { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(3px, 0.8vw, 8px); }
 .char-tile {
     --tile: #888;
     position: relative;

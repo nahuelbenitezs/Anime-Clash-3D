@@ -15,7 +15,7 @@ function runLoadingScreen(onComplete) {
     const bar  = document.getElementById('load-bar');
     const text = document.getElementById('load-text');
     text.textContent = 'Cargando luchadores...';
-    window.modelLoader.preload(['goku', 'pikachu', 'charizard'], (progress) => {
+    window.modelLoader.preload(['goku', 'vegeta', 'naruto', 'tanjiro', 'pikachu', 'charizard'], (progress) => {
         bar.style.width = Math.round(progress * 100) + '%';
     }).then(() => {
         window.portraits = window.makePortraits(Object.keys(FIGHTER_STATS));

@@ -478,7 +478,7 @@ class Fighter {
 
     tryLoadGLB() {
         if (!window.modelLoader) return;
-        const validModels = ['goku', 'pikachu', 'charizard'];
+        const validModels = ['goku', 'vegeta', 'naruto', 'tanjiro', 'pikachu', 'charizard'];
         if (!validModels.includes(this.type)) return;
 
         window.modelLoader.loadModel(this.type, `assets/${this.type}.glb?v=${ASSET_VERSION}`, (data) => {
@@ -525,14 +525,32 @@ class Fighter {
         this.hasGLB = true;
         this.glbModel = model;
 
-        // El clip de guardia de Goku lo deja de espaldas a +Z: se lo da vuelta para que
-        // las poses, escritas en ejes del personaje, valgan igual para todos.
-        if (base && base.flip) {
-            model.rotation.y = Math.PI;
-            model.position.x *= -1;
-            model.position.z *= -1;
+        // Alinear el frente de la pose base con +Z, dirección que usa el combate.
+        if (base && base.yaw) {
+            model.rotation.y = base.yaw;
+            model.position.applyAxisAngle(new THREE.Vector3(0, 1, 0), base.yaw);
         }
         this.rig = PoseRig.forModel(this.type, this.glbHolder);
+        if (['naruto', 'tanjiro', 'vegeta'].includes(this.type)) {
+            // Los modelos nuevos vienen en reposo o caminando, no en guardia.
+            // Llevar ambos brazos a una pose base antes de aplicar las animaciones.
+            const rootRotation = this.glbHolder.getWorldQuaternion(new THREE.Quaternion());
+            const inverseRoot = rootRotation.clone().invert();
+            for (const [side, sign] of [['L', 1], ['R', -1]]) {
+                const upper = this.rig.joints['arm' + side];
+                const lower = this.rig.joints['fore' + side];
+                if (!upper || !lower) continue;
+                this.glbHolder.updateMatrixWorld(true);
+                const direction = lower.bone.getWorldPosition(new THREE.Vector3())
+                    .sub(upper.bone.getWorldPosition(new THREE.Vector3()))
+                    .applyQuaternion(inverseRoot).normalize();
+                const target = new THREE.Vector3(sign * 0.25, -0.8, 0.45).normalize();
+                const adjustment = new THREE.Quaternion().setFromUnitVectors(direction, target);
+                const orientation = inverseRoot.clone().multiply(upper.bone.getWorldQuaternion(new THREE.Quaternion()));
+                upper.bone.quaternion.multiply(orientation.clone().invert().multiply(adjustment).multiply(orientation));
+            }
+            this.rig = PoseRig.forModel(this.type, this.glbHolder);
+        }
     }
 
     mat(color) {
@@ -540,7 +558,7 @@ class Fighter {
     }
 
     buildModel() {
-        if (this.type === 'goku') this.buildGoku();
+        if (this.type === 'goku' || this.type === 'naruto' || this.type === 'tanjiro') this.buildGoku();
         else if (this.type === 'pikachu') this.buildPikachu();
         else if (this.type === 'vegeta') this.buildVegeta();
         else if (this.type === 'charizard') this.buildCharizard();
