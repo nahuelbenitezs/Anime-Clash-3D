@@ -10,7 +10,7 @@
     <title>Anime Clash 3D</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Bangers&family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/style.css?v=graphics-3">
     <!-- Three.js + Loaders -->
     <script src="vendor/three.min.js"></script>
     <script src="vendor/GLTFLoader.js"></script>
@@ -168,6 +168,7 @@
 
 <!-- Golpe recibido -->
 <div id="damage-flash"></div>
+<div id="cinematic-frame" aria-hidden="true"></div>
 
 <!-- ═══════════════ TOUCH CONTROLS ═══════════════ -->
 <div id="touch-controls" class="hidden">
@@ -184,6 +185,7 @@
 
 <!-- ═══════════════ UTILITY BUTTONS ═══════════════ -->
 <div id="util-bar">
+    <button id="btn-graphics" class="util-btn graphics-btn" aria-label="Calidad gráfica: automática">FX AUTO</button>
     <button id="btn-sound" class="util-btn" aria-label="Sonido"><svg><use href="#i-sound"/></svg></button>
     <button id="btn-fs" class="util-btn" aria-label="Pantalla completa"><svg><use href="#i-full"/></svg></button>
     <button id="btn-pause" class="util-btn hidden" aria-label="Pausa"><svg><use href="#i-pause"/></svg></button>
@@ -220,16 +222,17 @@
 <!-- ═══════════════ SCRIPTS ═══════════════ -->
 <script src="js/audio.js"></script>
 <script src="js/model_loader.js"></script>
-<script src="js/arena.js"></script>
-<script src="js/vfx.js"></script>
-<script src="js/roster.js"></script>
-<script src="js/rig.js"></script>
+<script src="js/arena.js?v=graphics-3"></script>
+<script src="js/vfx.js?v=graphics-3"></script>
+<script src="js/roster.js?v=graphics-3"></script>
+<script src="js/rig.js?v=graphics-3"></script>
 <script src="js/vegeta.js"></script>
-<script src="js/characters.js"></script>
+<script src="js/characters.js?v=graphics-3"></script>
 <script src="js/ai.js"></script>
 <script src="js/controls.js"></script>
 <script src="js/portraits.js"></script>
-<script src="js/game.js"></script>
+<script src="js/game.js?v=graphics-3"></script>
+<script src="js/presentation.js?v=graphics-3"></script>
 <script src="js/online.js"></script>
 <script src="js/main.js"></script>
 </body>

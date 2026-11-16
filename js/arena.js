@@ -1,252 +1,314 @@
-// Arena: ring de piedra al atardecer, dibujado como un fondo de manga.
-// El fondo son planos con textura pintada por código: pesa poco y no necesita archivos.
+// Canyon sanctuary: physically lit stone, layered terrain and GPU-driven atmosphere.
+// The fighting surface remains 25 x 15 units, exactly at y = 0.
 const ARENA_COLORS = {
-    skyTop: '#c9512f', skyMid: '#ee9a4d', skyLow: '#f7d58a',
-    ink: '#14100c', farHill: '#a4553a', midHill: '#6d3528', nearHill: '#3a1d1b',
-    stone: '#b9a487', stoneDark: '#8f7b63', stoneLine: '#2b2118', fog: 0xe39a5a,
+    skyTop: '#29394f', skyMid: '#bc8177', skyLow: '#f4bf83',
+    ink: '#171b24', farHill: '#a58e90', midHill: '#775c5b', nearHill: '#4e4247',
+    stone: '#c3bdab', stoneDark: '#665f59', stoneLine: '#4c4948', fog: 0xb89c8d,
 };
 
 function canvasTexture(w, h, draw) {
     const canvas = document.createElement('canvas');
-    canvas.width = w;
-    canvas.height = h;
+    canvas.width = w; canvas.height = h;
     draw(canvas.getContext('2d'), w, h);
     const tex = new THREE.CanvasTexture(canvas);
     tex.encoding = THREE.sRGBEncoding;
     return tex;
 }
 
-// Generador con semilla: el fondo sale igual en cada partida.
 function seededRandom(seed) {
     let s = seed;
-    return () => {
-        s = (s * 16807) % 2147483647;
-        return (s - 1) / 2147483646;
-    };
+    return () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; };
 }
 
 class Arena {
     constructor(scene) {
         this.scene = scene;
+        this.root = new THREE.Group();
+        this.root.name = 'Canyon sanctuary';
+        scene.add(this.root);
+        this.time = 0;
+        this.quality = 1;
+        this.textures = [];
+        this.disposed = false;
+        this.matrix = new THREE.Matrix4();
+        this.dummy = new THREE.Object3D();
         this.buildSky();
-        this.buildHills();
+        this.buildTerrain();
         this.buildRing();
-        this.buildRuins();
+        this.buildSanctuary();
+        this.buildAtmosphere();
+        this.loadStone();
+    }
+
+    material(color, roughness = 0.88) {
+        return new THREE.MeshStandardMaterial({ color: window.inkColor(color), roughness, metalness: 0.04 });
+    }
+
+    mesh(geometry, material, x, y, z) {
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.position.set(x, y, z);
+        this.root.add(mesh);
+        return mesh;
+    }
+
+    // Repeated stones share geometry/material and are submitted in one draw call.
+    instances(geometry, material, entries, shadows = false) {
+        const mesh = new THREE.InstancedMesh(geometry, material, entries.length);
+        const d = this.dummy;
+        entries.forEach((e, i) => {
+            d.position.set(e.x || 0, e.y || 0, e.z || 0);
+            d.rotation.set(e.rx || 0, e.ry || 0, e.rz || 0);
+            d.scale.set(e.sx || 1, e.sy || 1, e.sz || 1);
+            d.updateMatrix(); mesh.setMatrixAt(i, d.matrix);
+            if (e.color !== undefined) mesh.setColorAt(i, new THREE.Color(e.color));
+        });
+        mesh.castShadow = shadows; mesh.receiveShadow = true;
+        mesh.instanceMatrix.needsUpdate = true;
+        this.root.add(mesh);
+        return mesh;
     }
 
     buildSky() {
-        const tex = canvasTexture(16, 512, (ctx, w, h) => {
-            const g = ctx.createLinearGradient(0, 0, 0, h);
-            g.addColorStop(0, ARENA_COLORS.skyTop);
-            g.addColorStop(0.55, ARENA_COLORS.skyMid);
-            g.addColorStop(1, ARENA_COLORS.skyLow);
-            ctx.fillStyle = g;
-            ctx.fillRect(0, 0, w, h);
+        const material = new THREE.ShaderMaterial({
+            side: THREE.BackSide, depthWrite: false, fog: false,
+            uniforms: { uTime: { value: 0 } },
+            vertexShader: `varying vec3 vDirection; void main() {
+                vDirection = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }`,
+            fragmentShader: `varying vec3 vDirection; uniform float uTime;
+                float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
+                float noise(vec2 p) { vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
+                    return mix(mix(hash(i),hash(i+vec2(1.,0.)),f.x),mix(hash(i+vec2(0.,1.)),hash(i+1.),f.x),f.y); }
+                void main() {
+                    vec3 d=normalize(vDirection); float h=clamp(d.y*2.1+0.15,0.,1.);
+                    vec3 sky=mix(vec3(.97,.70,.46),vec3(.15,.23,.34),pow(h,.65));
+                    vec2 uv=vec2(atan(d.x,-d.z)*3.,d.y*13.);
+                    float n=noise(uv*vec2(1.,3.)+vec2(uTime*.009,0.));
+                    n+=noise(uv*vec2(2.,5.)-vec2(uTime*.013,0.))*.35;
+                    float clouds=smoothstep(.65,1.05,n)*smoothstep(.02,.2,d.y)*(1.-smoothstep(.48,.8,d.y));
+                    sky=mix(sky,vec3(.88,.66,.58),clouds*.55);
+                    float sun=max(0.,dot(d,normalize(vec3(-.25,.2,-1.))));
+                    sky+=vec3(1.,.47,.16)*pow(sun,22.)*.28;
+                    gl_FragColor=vec4(sky,1.);
+                }`,
         });
-        this.scene.background = tex;
-
-        // Sol: un disco plano con tramado de líneas, como trama de imprenta
-        const sunTex = canvasTexture(256, 256, (ctx, w) => {
-            ctx.fillStyle = '#fff3cf';
-            ctx.beginPath();
-            ctx.arc(w / 2, w / 2, w * 0.46, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.globalCompositeOperation = 'destination-out';
-            for (let y = w * 0.56, gap = 16; y < w; y += gap, gap = Math.max(5, gap - 1.4)) {
-                ctx.fillRect(0, y, w, 16 - gap + 3);
-            }
+        this.sky = this.mesh(new THREE.SphereGeometry(145, 24, 16), material, 0, 0, 0);
+        this.sky.renderOrder = -10;
+        const halo = canvasTexture(256, 256, (ctx, w) => {
+            const g = ctx.createRadialGradient(w/2,w/2,0,w/2,w/2,w/2);
+            g.addColorStop(0,'rgba(255,246,211,1)'); g.addColorStop(.12,'rgba(255,224,163,.95)');
+            g.addColorStop(.23,'rgba(255,193,102,.22)'); g.addColorStop(1,'rgba(255,154,70,0)');
+            ctx.fillStyle=g; ctx.fillRect(0,0,w,w);
         });
-        const sun = new THREE.Mesh(
-            new THREE.PlaneGeometry(22, 22),
-            new THREE.MeshBasicMaterial({ map: sunTex, transparent: true, fog: false, depthWrite: false })
-        );
-        sun.position.set(-9, 11, -70);
-        this.scene.add(sun);
+        this.textures.push(halo);
+        const sun = new THREE.Sprite(new THREE.SpriteMaterial({ map: halo, transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending }));
+        sun.position.set(-22,18,-87); sun.scale.set(43,43,1); this.root.add(sun);
+        // Matte painting original en el horizonte; el cielo procedural queda de respaldo.
+        new THREE.TextureLoader().load('assets/environment/sunset-sky.png', texture => {
+            if (this.disposed) { texture.dispose(); return; }
+            texture.encoding = THREE.sRGBEncoding;
+            this.textures.push(texture);
+            const backdrop = this.mesh(new THREE.PlaneGeometry(360, 180), new THREE.MeshBasicMaterial({
+                map: texture, fog: false, depthWrite: false, toneMapped: false,
+            }), 0, 55, -110);
+            backdrop.renderOrder = -9;
+            sun.visible = false;
+        }, undefined, () => {});
     }
 
-    hillLayer(color, seed, peaks, roughness, width, height, z, y) {
-        const tex = canvasTexture(1024, 256, (ctx, w, h) => {
-            const rand = seededRandom(seed);
-            ctx.fillStyle = color;
-            ctx.beginPath();
-            ctx.moveTo(0, h);
-            for (let i = 0; i <= peaks; i++) {
-                const x = (i / peaks) * w;
-                const peak = i % 2 === 0;
-                const py = peak ? h * (0.1 + rand() * 0.45) : h * (0.55 + rand() * roughness);
-                ctx.lineTo(x, py);
-            }
-            ctx.lineTo(w, h);
-            ctx.closePath();
-            ctx.fill();
-            ctx.lineWidth = 2.5;
-            ctx.strokeStyle = ARENA_COLORS.ink;
-            ctx.stroke();
-        });
-        const mesh = new THREE.Mesh(
-            new THREE.PlaneGeometry(width, height),
-            new THREE.MeshBasicMaterial({ map: tex, transparent: true, fog: false, depthWrite: false })
-        );
-        mesh.position.set(0, y, z);
-        this.scene.add(mesh);
-    }
-
-    buildHills() {
-        this.hillLayer(ARENA_COLORS.farHill, 11, 22, 0.25, 190, 34, -66, 11);
-        this.hillLayer(ARENA_COLORS.midHill, 29, 16, 0.3, 170, 26, -52, 6);
-        this.hillLayer(ARENA_COLORS.nearHill, 47, 12, 0.28, 150, 18, -38, 2.5);
-
-        // Suelo lejano, para que el ring no flote
-        const ground = new THREE.Mesh(
-            new THREE.PlaneGeometry(240, 120),
-            new THREE.MeshBasicMaterial({ color: window.inkColor(0x3a1d1b), fog: false })
-        );
-        ground.rotation.x = -Math.PI / 2;
-        ground.position.set(0, -1.6, -10);
-        this.scene.add(ground);
+    buildTerrain() {
+        const groundMat = this.material(0x6b625b);
+        const ground = this.mesh(new THREE.PlaneGeometry(260, 220),groundMat,0,-2.45,-35);
+        ground.rotation.x=-Math.PI/2; ground.receiveShadow=true;
+        this.rockMat = this.material(0x867a6d);
+        const farMat = this.material(0xa39491);
+        const rockGeo = new THREE.DodecahedronGeometry(1,1);
+        const rand=seededRandom(812), far=[], near=[], rubble=[];
+        // Real volumes instead of background cards: perspective changes during the cinematic.
+        for(let i=0;i<34;i++) {
+            const x=-92+i*5.6, h=5+rand()*13;
+            far.push({x,y:h*.32-4,z:-65-rand()*20,sx:7+rand()*5,sy:h*.72,sz:6+rand()*8,ry:rand()*6,rz:(rand()-.5)*.35});
+        }
+        for(let i=0;i<26;i++) {
+            const side=i%2?1:-1, x=side*(23+rand()*40), h=7+rand()*18;
+            near.push({x,y:h*.29-3,z:-22-rand()*36,sx:5+rand()*7,sy:h*.65,sz:4+rand()*6,ry:rand()*6,rz:(rand()-.5)*.45});
+        }
+        for(let i=0;i<62;i++) {
+            const side=i%2?1:-1, size=.25+rand()*1.8;
+            rubble.push({x:side*(15+rand()*22),y:-2.3+size*.38,z:-13+rand()*32,sx:size*1.5,sy:size*.75,sz:size,rx:rand()*2,ry:rand()*6,color:i%3?0x8a8071:0x5d5a55});
+        }
+        this.instances(rockGeo,farMat,far);
+        this.instances(rockGeo,this.rockMat,near);
+        this.instances(rockGeo,this.rockMat,rubble,true);
+        // Shore sand and sparse, wind-swept grass soften the silhouette of the platform.
+        const grasses=[];
+        for(let i=0;i<100;i++) {
+            const side=i%2?1:-1;
+            grasses.push({x:side*(14+rand()*10),y:-2.1,z:-9+rand()*23,sx:.035,sy:.35+rand()*.6,sz:.035,rz:(rand()-.5)*.4,color:i%2?0xa5976e:0x706f55});
+        }
+        this.grass=this.instances(new THREE.BoxGeometry(1,1,1),this.material(0xa5976e),grasses);
+        this.groundMat=groundMat;
     }
 
     buildRing() {
-        const W = 25, D = 15;
-        const tex = canvasTexture(1024, 614, (ctx, w, h) => {
-            const rand = seededRandom(7);
-            ctx.fillStyle = ARENA_COLORS.stone;
-            ctx.fillRect(0, 0, w, h);
-
-            // Losas de piedra: cada una con un tono apenas distinto y líneas irregulares
-            const cols = 10, rows = 6;
-            const cw = w / cols, ch = h / rows;
-            for (let r = 0; r < rows; r++) {
-                for (let c = 0; c < cols; c++) {
-                    const shade = rand();
-                    if (shade < 0.45) {
-                        ctx.fillStyle = shade < 0.18 ? ARENA_COLORS.stoneDark : '#a8947a';
-                        ctx.fillRect(c * cw, r * ch, cw, ch);
-                    }
-                    // Grietas de tinta
-                    if (rand() < 0.22) {
-                        ctx.strokeStyle = 'rgba(43,33,24,0.55)';
-                        ctx.lineWidth = 1.5;
-                        ctx.beginPath();
-                        let x = c * cw + rand() * cw, y = r * ch + rand() * ch;
-                        ctx.moveTo(x, y);
-                        for (let i = 0; i < 3; i++) {
-                            x += (rand() - 0.5) * 40;
-                            y += (rand() - 0.5) * 40;
-                            ctx.lineTo(x, y);
-                        }
-                        ctx.stroke();
-                    }
-                }
+        const box=new THREE.BoxGeometry(1,1,1);
+        const base=this.material(0x484a4d), trim=this.material(0x8f8170), tileMat=this.material(0x9a9c94,.82);
+        this.tileMat=tileMat;
+        const foundation=this.mesh(new THREE.BoxGeometry(28,1.2,18),base,0,-1.8,0); foundation.receiveShadow=true;
+        const upper=this.mesh(new THREE.BoxGeometry(26,0.6,16),trim,0,-.9,0); upper.receiveShadow=true;
+        const under=this.mesh(new THREE.BoxGeometry(25.3,.34,15.3),base,0,-.43,0); under.receiveShadow=true;
+        const rand=seededRandom(17), tiles=[];
+        for(let z=0;z<6;z++)for(let x=0;x<10;x++) {
+            const shade=.82+rand()*.14;
+            tiles.push({x:-11.25+x*2.5,y:-.13,z:-6.25+z*2.5,sx:2.478,sy:.26,sz:2.478,color:new THREE.Color(shade,shade*.985,shade*.955).getHex()});
+        }
+        this.instances(box,tileMat,tiles);
+        // Recessed bronze edge, with an emissive core kept deliberately thin.
+        const edges=[];
+        for(const z of [-7.4,7.4])edges.push({x:0,y:-.012,z,sx:24.8,sy:.035,sz:.075});
+        for(const x of [-12.4,12.4])edges.push({x,y:-.012,z:0,sx:.075,sy:.035,sz:14.8});
+        this.instances(box,this.material(0xc5a06a,.4),edges);
+        const etches=canvasTexture(1024,614,(ctx,w,h)=>{
+            const r=seededRandom(10); ctx.clearRect(0,0,w,h);
+            for(let i=0;i<80;i++) {
+                let x=r()*w,y=r()*h; ctx.strokeStyle='rgba(39,41,44,.27)';ctx.lineWidth=.7+r()*1.5;ctx.beginPath();ctx.moveTo(x,y);
+                for(let j=0;j<3;j++){x+=(r()-.5)*35;y+=(r()-.5)*25;ctx.lineTo(x,y);}ctx.stroke();
             }
-            ctx.strokeStyle = ARENA_COLORS.stoneLine;
-            ctx.lineWidth = 3;
-            for (let c = 0; c <= cols; c++) {
-                ctx.beginPath(); ctx.moveTo(c * cw, 0); ctx.lineTo(c * cw, h); ctx.stroke();
+            ctx.translate(w/2,h/2);ctx.scale(w/25,h/15);
+            ctx.strokeStyle='rgba(52,66,68,.48)';ctx.lineWidth=.035;
+            for(const radius of [2.9,3.1,4.5,4.6]){ctx.beginPath();ctx.arc(0,0,radius,0,Math.PI*2);ctx.stroke();}
+            for(let i=0;i<32;i++) {
+                const a=i*Math.PI/16;ctx.save();ctx.rotate(a);ctx.fillStyle='rgba(57,65,65,.5)';ctx.fillRect(3.4,-.025,i%4===0?.75:.3,.05);ctx.restore();
             }
-            for (let r = 0; r <= rows; r++) {
-                ctx.beginPath(); ctx.moveTo(0, r * ch); ctx.lineTo(w, r * ch); ctx.stroke();
-            }
-
-            // Marca central: un círculo pintado con pincel seco
-            ctx.strokeStyle = 'rgba(20,16,12,0.8)';
-            ctx.lineWidth = 9;
-            ctx.beginPath();
-            ctx.ellipse(w / 2, h / 2, w * 0.13, w * 0.13, 0, 0.2, Math.PI * 1.92);
-            ctx.stroke();
-            // Anillos de combate y marcas de impacto, pintados en la piedra.
-            ctx.save();
-            ctx.translate(w / 2, h / 2);
-            ctx.strokeStyle = 'rgba(74,35,26,.5)';
-            ctx.lineWidth = 3;
-            for (const radius of [0.17, 0.23, 0.29]) {
-                ctx.beginPath(); ctx.arc(0, 0, w * radius, 0, Math.PI * 2); ctx.stroke();
-            }
-            ctx.strokeStyle = 'rgba(239,111,44,.55)';
-            ctx.lineWidth = 3;
-            for (let i = 0; i < 20; i++) {
-                const angle = i * Math.PI / 10;
-                const r1 = w * 0.232, r2 = w * (i % 5 === 0 ? 0.28 : 0.255);
-                ctx.beginPath(); ctx.moveTo(Math.cos(angle) * r1, Math.sin(angle) * r1);
-                ctx.lineTo(Math.cos(angle) * r2, Math.sin(angle) * r2); ctx.stroke();
-            }
-            ctx.restore();
-            // Borde del ring
-            ctx.lineWidth = 14;
-            ctx.strokeRect(7, 7, w - 14, h - 14);
+            ctx.strokeStyle='rgba(59,68,66,.55)';ctx.lineWidth=.06;ctx.beginPath();
+            for(let i=0;i<7;i++){const a=i*Math.PI/3;ctx.lineTo(Math.cos(a)*1.35,Math.sin(a)*1.35);}ctx.stroke();
+            ctx.lineWidth=.035;ctx.beginPath();ctx.moveTo(-1.1,0);ctx.lineTo(1.1,0);ctx.moveTo(0,-1.1);ctx.lineTo(0,1.1);ctx.stroke();
         });
-        tex.anisotropy = 4;
-
-        const stoneSide = new THREE.MeshToonMaterial({ color: window.inkColor(0x7c6650), gradientMap: window.toonRamp() });
-        const top = new THREE.MeshToonMaterial({ map: tex, gradientMap: window.toonRamp() });
-        const ring = new THREE.Mesh(
-            new THREE.BoxGeometry(W, 1.6, D),
-            [stoneSide, stoneSide, top, stoneSide, stoneSide, stoneSide]
-        );
-        ring.position.y = -0.8;
-        ring.receiveShadow = true;
-        this.scene.add(ring);
-
-        // Contorno de tinta del ring
-        const edges = new THREE.LineSegments(
-            new THREE.EdgesGeometry(new THREE.BoxGeometry(W, 1.6, D)),
-            new THREE.LineBasicMaterial({ color: window.inkColor(0x14100c) })
-        );
-        edges.position.y = -0.8;
-        this.scene.add(edges);
-
-        // Postes de piedra con faroles
-        const postMat = new THREE.MeshToonMaterial({ color: window.inkColor(0x4a3627), gradientMap: window.toonRamp() });
-        const lampMat = new THREE.MeshBasicMaterial({ color: window.inkColor(0xffd98a) });
-        const postGeo = new THREE.BoxGeometry(0.7, 3.2, 0.7);
-        const capGeo = new THREE.BoxGeometry(1.1, 0.25, 1.1);
-        const lampGeo = new THREE.BoxGeometry(0.42, 0.5, 0.42);
-        const outline = new THREE.MeshBasicMaterial({ color: window.inkColor(0x14100c), side: THREE.BackSide });
-        // Solo en el fondo: adelante taparían a los luchadores
-        [[-12, -7], [12, -7]].forEach(([x, z]) => {
-            const post = new THREE.Mesh(postGeo, postMat);
-            post.position.set(x, 1.6, z);
-            post.castShadow = true;
-            this.scene.add(post);
-            const hull = new THREE.Mesh(postGeo, outline);
-            hull.scale.set(1.08, 1.02, 1.08);
-            post.add(hull);
-            const cap = new THREE.Mesh(capGeo, postMat);
-            cap.position.set(x, 3.3, z);
-            this.scene.add(cap);
-            const lamp = new THREE.Mesh(lampGeo, lampMat);
-            lamp.position.set(x, 3.65, z);
-            this.scene.add(lamp);
-        });
+        this.textures.push(etches);
+        const decal=this.mesh(new THREE.PlaneGeometry(25,15),new THREE.MeshBasicMaterial({map:etches,transparent:true,depthWrite:false,opacity:.8}),0,.007,0);
+        decal.rotation.x=-Math.PI/2;
+        this.energyMaterial=new THREE.MeshStandardMaterial({color:0x7ce2d5,emissive:0x3ba998,emissiveIntensity:.6,roughness:.35,metalness:.25});
+        const ring=this.mesh(new THREE.TorusGeometry(4.55,.018,4,96),this.energyMaterial,0,.016,0);ring.rotation.x=Math.PI/2;
+        const runes=[];
+        for(let i=0;i<16;i++){const a=i*Math.PI/8;runes.push({x:Math.cos(a)*4.15,y:.015,z:Math.sin(a)*4.15,sx:.18,sy:.018,sz:.035,ry:-a});}
+        this.instances(box,this.energyMaterial,runes);
+        // Steps connect the structure to its surroundings; none rise above the fighting plane.
+        this.instances(box,trim,[
+            {x:0,y:-2.18,z:10,sx:9,sy:.5,sz:2.8},
+            {x:0,y:-1.77,z:9.2,sx:8.5,sy:.4,sz:2.4},
+            {x:0,y:-1.4,z:8.4,sx:8,sy:.35,sz:1.7},
+        ]);
+        // Fine warm strip and chamfer-like bands make the base read as an engineered ruin.
+        const bands=[];
+        for(const z of [-8.99,8.99])bands.push({x:0,y:-1.5,z,sx:27.8,sy:.065,sz:.04});
+        this.instances(box,new THREE.MeshBasicMaterial({color:0xe6ac68}),bands);
     }
-    // Ruinas y rocas al fondo: la silueta enmarca el combate sin ocupar el ring.
-    buildRuins() {
-        const stone = new THREE.MeshToonMaterial({ color: window.inkColor(0x654332), gradientMap: window.toonRamp() });
-        const dark = new THREE.MeshToonMaterial({ color: window.inkColor(0x3c2926), gradientMap: window.toonRamp() });
-        const glow = new THREE.MeshBasicMaterial({ color: window.inkColor(0xffa356) });
-        const column = new THREE.BoxGeometry(1.35, 7, 1.35);
-        const cap = new THREE.BoxGeometry(1.9, .45, 1.9);
-        [[-18,-20,6.5],[-13.8,-25,4.6],[14,-24,5.2],[19,-19,7.4]].forEach(([x,z,h], i) => {
-            const p = new THREE.Mesh(column, stone); p.scale.y = h / 7; p.position.set(x,h / 2 - 1.4,z);
-            p.rotation.z = (i % 2 ? 1 : -1) * .06; this.scene.add(p);
-            const top = new THREE.Mesh(cap,dark); top.position.set(x,h - 1.35,z); top.rotation.z = p.rotation.z; this.scene.add(top);
-            const band = new THREE.Mesh(new THREE.BoxGeometry(1.4,.08,1.4),glow); band.position.set(x,h * .55 - 1.4,z); this.scene.add(band);
+
+    buildSanctuary() {
+        const stone=this.material(0x9a8f7c), dark=this.material(0x5b5e5b), bronze=this.material(0x9d8460,.53);
+        this.archMat=stone;
+        const blocks=[], darkBlocks=[], bronzeBlocks=[];
+        // An ancient gateway anchors the centre of the canyon without occluding the ring.
+        for(const x of [-9.5,9.5]) {
+            blocks.push({x,y:2.4,z:-20,sx:2.4,sy:9.7,sz:2.4});
+            darkBlocks.push({x,y:-1.7,z:-20,sx:3.5,sy:1.5,sz:3.5},{x,y:6.7,z:-20,sx:3.5,sy:.55,sz:3.5});
+            bronzeBlocks.push({x,y:3.8,z:-20,sx:2.5,sy:.16,sz:2.5});
+        }
+        blocks.push({x:0,y:7.45,z:-20,sx:23,sy:1.2,sz:2.5},{x:0,y:8.27,z:-20,sx:25,sy:.5,sz:3});
+        darkBlocks.push({x:0,y:6.9,z:-20,sx:20,sy:.22,sz:2.7});
+        // Broken side colonnades become a visual frame, never foreground obstacles.
+        [[-17,-13,5.5],[-21,-20,7.5],[17,-14,6.6],[22,-23,8.4]].forEach(([x,z,h],i)=>{
+            blocks.push({x,y:h*.5-2.4,z,sx:2,sy:h,sz:2,rz:i%2?.045:-.03});
+            darkBlocks.push({x,y:h-2.4,z,sx:2.9,sy:.4,sz:2.9},{x,y:-2,z,sx:3,sy:.8,sz:3});
+            bronzeBlocks.push({x,y:h*.6-2.4,z,sx:2.1,sy:.12,sz:2.1});
         });
-        const random = seededRandom(982);
-        const rockGeometry = new THREE.DodecahedronGeometry(1, 0);
-        for (let i = 0; i < 18; i++) {
-            const rock = new THREE.Mesh(rockGeometry, i % 3 ? stone : dark);
-            const side = i % 2 ? 1 : -1;
-            rock.position.set(side * (13 + random() * 16), .5 + random() * 12, -22 - random() * 22);
-            const size = .35 + random() * 1.5;
-            rock.scale.set(size * 1.4, size * .55, size);
-            rock.rotation.set(random() * 2, random() * 2, random() * 2);
-            this.scene.add(rock);
+        const cube=new THREE.BoxGeometry(1,1,1);
+        this.instances(cube,stone,blocks,true);this.instances(cube,dark,darkBlocks);this.instances(cube,bronze,bronzeBlocks);
+        const haloMaterial=new THREE.MeshBasicMaterial({color:0xffc784,transparent:true,opacity:.23,blending:THREE.AdditiveBlending,depthWrite:false});
+        this.portal=this.mesh(new THREE.TorusGeometry(2.7,.035,4,64),this.energyMaterial,0,3.8,-20);
+        this.portalGlow=this.mesh(new THREE.TorusGeometry(2.7,.12,4,64),haloMaterial,0,3.8,-20.01);
+        const lanterns=[];
+        for(const x of [-12.5,12.5]){
+            lanterns.push({x,y:.75,z:-7.7,sx:.5,sy:.7,sz:.5});
+        }
+        this.instances(cube,new THREE.MeshStandardMaterial({color:0xffd99c,emissive:0xffb85f,emissiveIntensity:1.6}),lanterns);
+        this.instances(cube,dark,[{x:-12.5,y:-.1,z:-7.7,sx:1,sy:1.05,sz:1},{x:12.5,y:-.1,z:-7.7,sx:1,sy:1.05,sz:1}]);
+    }
+
+    buildAtmosphere() {
+        const count=140, rand=seededRandom(622), positions=new Float32Array(count*3),phase=new Float32Array(count);
+        for(let i=0;i<count;i++){positions[i*3]=(rand()-.5)*64;positions[i*3+1]=rand()*13;positions[i*3+2]=-34+rand()*55;phase[i]=rand()*10;}
+        const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.BufferAttribute(positions,3));geo.setAttribute('aPhase',new THREE.BufferAttribute(phase,1));
+        this.dust=new THREE.Points(geo,new THREE.ShaderMaterial({
+            transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,
+            uniforms:{uTime:{value:0},uOpacity:{value:.6}},
+            vertexShader:`attribute float aPhase;uniform float uTime;varying float vAlpha;
+                void main(){vec3 p=position;p.x+=sin(uTime*.13+aPhase)*1.3;p.y+=sin(uTime*.21+aPhase)*.7;
+                    vec4 mv=modelViewMatrix*vec4(p,1.);gl_Position=projectionMatrix*mv;gl_PointSize=clamp(38./max(1.,-mv.z),1.,3.);
+                    vAlpha=(.3+.3*sin(aPhase+uTime*.7))*clamp((-mv.z-3.)/12.,0.,1.);}`,
+            fragmentShader:`varying float vAlpha;uniform float uOpacity;void main(){float d=length(gl_PointCoord-.5)*2.;if(d>1.)discard;
+                gl_FragColor=vec4(1.,.79,.48,(1.-d*d)*vAlpha*uOpacity);}`,
+        }));
+        this.dust.frustumCulled=false;this.root.add(this.dust);
+        // Slanted haze planes simulate shafts without an expensive volumetric pass.
+        const shaftTex=canvasTexture(64,256,(ctx,w,h)=>{
+            const g=ctx.createLinearGradient(0,0,w,0);g.addColorStop(0,'rgba(255,226,181,0)');g.addColorStop(.5,'rgba(255,226,181,.22)');g.addColorStop(1,'rgba(255,226,181,0)');
+            ctx.fillStyle=g;ctx.fillRect(0,0,w,h);
+            ctx.globalCompositeOperation='destination-in';const a=ctx.createLinearGradient(0,0,0,h);a.addColorStop(0,'rgba(0,0,0,0)');a.addColorStop(.4,'rgba(0,0,0,1)');a.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=a;ctx.fillRect(0,0,w,h);
+        });
+        this.textures.push(shaftTex);
+        this.shafts=new THREE.Group();this.root.add(this.shafts);
+        const shaftMat=new THREE.MeshBasicMaterial({map:shaftTex,transparent:true,opacity:.3,depthWrite:false,blending:THREE.AdditiveBlending,side:THREE.DoubleSide});
+        for(let i=0;i<3;i++){
+            const beam=new THREE.Mesh(new THREE.PlaneGeometry(4+i*1.5,24),shaftMat);beam.position.set(-13+i*9,8,-16-i*5);beam.rotation.z=-.43;this.shafts.add(beam);
         }
     }
 
+    loadStone() {
+        const loader=new THREE.TextureLoader();
+        const load=(name,targets,key,repeat,color)=>{
+            loader.load(`assets/environment/stone-${name}.jpg`,texture=>{
+                if(this.disposed){texture.dispose();return;}
+                texture.wrapS=texture.wrapT=THREE.RepeatWrapping;texture.repeat.set(repeat,repeat);texture.anisotropy=4;
+                if(color)texture.encoding=THREE.sRGBEncoding;
+                this.textures.push(texture);
+                targets.forEach(material=>{material[key]=texture;material.needsUpdate=true;});
+            },undefined,()=>{}); // Geometry and base colours still work when an asset is unavailable.
+        };
+        load('color',[this.rockMat,this.groundMat,this.archMat],'map',5,true);
+        load('normal',[this.tileMat],'normalMap',2,false);
+        this.tileMat.normalScale=new THREE.Vector2(.18,.18);
+        load('roughness',[this.tileMat,this.rockMat],'roughnessMap',2,false);
+    }
+
+    update(dt) {
+        this.time+=Math.min(dt,.1);
+        this.sky.material.uniforms.uTime.value=this.time;
+        this.dust.material.uniforms.uTime.value=this.time;
+        this.energyMaterial.emissiveIntensity=.5+Math.sin(this.time*.8)*.08;
+        this.portal.rotation.z=this.time*.025;
+        this.portalGlow.material.opacity=.19+Math.sin(this.time*1.2)*.035;
+    }
+
+    setQuality(quality) {
+        this.quality=quality;
+        this.dust.geometry.setDrawRange(0,quality<.7?60:140);
+        this.shafts.visible=quality>=.7;
+        this.grass.visible=quality>=.6;
+    }
+
+    dispose() {
+        this.disposed=true;
+        const geometries=new Set(),materials=new Set();
+        this.root.traverse(object=>{
+            if(object.geometry)geometries.add(object.geometry);
+            if(object.material)(Array.isArray(object.material)?object.material:[object.material]).forEach(m=>materials.add(m));
+        });
+        geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());this.textures.forEach(t=>t.dispose());
+        this.scene.remove(this.root);
+    }
 }
 
-window.Arena = Arena;
-window.ARENA_COLORS = ARENA_COLORS;
-window.canvasTexture = canvasTexture;
+window.Arena=Arena;
+window.ARENA_COLORS=ARENA_COLORS;
+window.canvasTexture=canvasTexture;

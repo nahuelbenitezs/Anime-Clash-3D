@@ -17,3 +17,10 @@ a=fighter(-1);b=fighter(1);a.ki=14;assert.equal(a.smash(b),false);a.ki=50;assert
 a=fighter(-1);b=fighter(1);a.state='hurt';a.ki=29;assert.equal(a.revenge(b),false);a.ki=40;assert(a.revenge(b));assert.equal(a.ki,10);assert(b.health<150);assert.equal(a.state,'idle');
 for(const type of ['goku','vegeta','naruto','tanjiro','pikachu','charizard']) for(const state of ['idle','run','attack','blast','guard','charge','ultimate','hurt','dash','ko']) {const f=fighter(-1);f.type=type;f.state=state;f.animStep=0;let result=POSE_FN[type](f,.1,1);for(const angles of Object.values(result.pose)) assert(angles.every(Number.isFinite));}
 console.log('OK: impacto, contraataque y poses de los seis luchadores');
+
+// Las texturas de huesos del clon se liberan; los materiales de la caché se conservan.
+a=fighter(-1);a.scene=new THREE.Scene();a.scene.add(a.group);a.joints={};a.glbModel=new THREE.Group();
+let released=0,sharedDisposed=0;const sharedMaterial=new THREE.MeshBasicMaterial();sharedMaterial.addEventListener('dispose',()=>sharedDisposed++);
+const mesh=new THREE.Mesh(new THREE.BoxGeometry(),sharedMaterial);mesh.skeleton={dispose(){released++}};a.glbModel.add(mesh);a.group.add(a.glbModel);
+a.dispose();a.dispose();assert.equal(released,1);assert.equal(sharedDisposed,0);assert.equal(a.scene.children.length,0);
+console.log('OK: limpieza de esqueletos sin destruir materiales compartidos');

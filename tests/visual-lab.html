@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Anime Clash — laboratorio visual</title>
+<style>body{margin:0;background:#10151d;color:#f6ead3;font:14px system-ui}header{height:50px;display:flex;align-items:center;gap:8px;padding:0 12px;flex-wrap:wrap}button,select{background:#283344;color:inherit;border:1px solid #68798b;padding:6px 9px;border-radius:4px;cursor:pointer}iframe{width:100%;height:calc(100vh - 88px);border:0;display:block}output{display:block;height:30px;padding:4px 12px;font:12px monospace}#errors{color:#ff8f7e}</style>
+<header><strong>Laboratorio visual</strong><select id="fighter" aria-label="Luchador"></select><button id="stage">Arena</button><button id="ult">Definitivo</button><button id="charge">Cargar</button><button id="run">Correr</button><button id="attack">Golpear</button><button id="quality">Calidad</button><button id="save">Guardar captura</button></header>
+<iframe id="game" src="../index.html" title="Vista previa del juego"></iframe>
+<output id="metrics">Cargando…</output><output id="errors"></output>
+<script>
+const frame=document.querySelector('iframe'), select=document.querySelector('select');
+let game,win,mode='arena',ready=false,errors=[];
+const metrics=document.querySelector('#metrics');
+frame.addEventListener('load',()=>{
+ win=frame.contentWindow;
+ win.addEventListener('error',e=>{errors.push(e.message);document.querySelector('#errors').textContent=errors.join(' | ')});
+ const original=win.console.error.bind(win.console);
+ win.console.error=(...args)=>{errors.push(args.map(String).join(' ').slice(0,220));document.querySelector('#errors').textContent=errors.join(' | ');original(...args)};
+ const wait=setInterval(()=>{
+  if(!win.game||!win.document.querySelector('#loading-screen').classList.contains('hidden'))return;
+  clearInterval(wait);game=win.game;win.soundManager.muted=true;
+  for(const [key,s] of Object.entries(win.FIGHTER_STATS))select.add(new Option(s.label,key));
+  start();ready=true;
+ },200);
+});
+function start(){
+ if(!game)return;
+ game.mode='cpu';game.applyGraphics('high');game.startMatch(select.value||'goku','vegeta');
+ win.document.querySelectorAll('.overlay').forEach(e=>e.classList.add('hidden'));
+ game.tasks=[];game.state='fighting';game.ai.update=()=>{};game.matchTimer=60;
+ game.player.position.set(-3,0,0);game.enemy.position.set(3,0,0);game.input.reset();
+ game.player.ki=100;game.enemy.ki=100;mode='arena';
+}
+select.onchange=start;document.querySelector('#stage').onclick=start;
+document.querySelector('#ult').onclick=()=>{start();game.player.triggerUltimate(game.enemy);mode='ultimate'};
+document.querySelector('#charge').onclick=()=>{start();mode='charge'};
+document.querySelector('#run').onclick=()=>{start();mode='run'};
+document.querySelector('#attack').onclick=()=>{start();game.enemy.position.x=-1;mode='attack'};
+document.querySelector('#quality').onclick=()=>{const modes=['high','medium','low'];game.applyGraphics(modes[(modes.indexOf(game.graphicsMode)+1)%3])};
+document.querySelector('#save').onclick=()=>{
+ game.presentation.render(0,mode==='ultimate'?1:0);
+ const a=document.createElement('a');a.download='anime-clash-'+(select.value||'arena')+'.png';a.href=game.renderer.domElement.toDataURL('image/png');a.click();
+};
+function tick(){
+ requestAnimationFrame(tick);if(!ready)return;
+ game.matchTimer=60;game.player.health=game.player.maxHealth;game.enemy.health=game.enemy.maxHealth;
+ game.enemy.invuln=5;
+ if(mode==='ultimate' && game.player.stateTimer>game.player.stats.ult.windup+.35){game.state='paused';mode='frozen';}
+ if(mode==='charge')game.player.chargeKi(true);
+ if(mode==='run'){game.player.setAnimation('run');game.player.stateTimer=.1;}
+ if(mode==='attack'){game.player.ki=100;game.player.attack(game.enemy);}
+ metrics.textContent='Calidad: '+game.graphicsMode+' | Geometrías: '+game.renderer.info.memory.geometries+' | Texturas: '+game.renderer.info.memory.textures+' | Rayos: '+game.vfx.beams.length+' | Errores: '+errors.length;
+}tick();
+</script></html>

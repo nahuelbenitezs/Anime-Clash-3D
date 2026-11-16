@@ -69,6 +69,14 @@ Después abrí <http://localhost:8000>.
 
 ## Cómo está hecho
 
+### Presentación gráfica
+
+La arena incluye acantilados y ruinas 3D, texturas físicas de piedra, suelo grabado, nubes animadas y polvo ambiental. Los efectos de combate usan shaders de energía, halos, luz dinámica, ondas, estelas y ataques definitivos con estilos propios de agua, fuego, electricidad y vórtice. El render final añade bloom a resolución reducida y una viñeta suave. Las poses incluyen anticipación, golpe y recuperación.
+
+El botón **FX AUTO** recorre calidad automática, alta, media y baja, y guarda la preferencia. En automática se reducen resolución, sombras, atmósfera y efectos si cae el rendimiento. Media conserva el bloom; baja lo desactiva. El movimiento de cámara y las líneas de velocidad se reducen con la preferencia del sistema para reducir movimiento.
+
+Con el servidor local activo, `tests/visual-lab.html` permite ver cada luchador, sus efectos y guardar capturas. `node tests/graphics-check.cjs` comprueba expiración y limpieza de efectos en doce reinicios de ronda, y poses finitas para los seis luchadores. La validación de rendimiento en teléfonos reales sigue pendiente.
+
 - **Three.js r128 sin compiladores:** JavaScript directo, servido por GitHub Pages. Three.js y Draco están en `vendor/` para que el juego no dependa de otros servidores.
 - **Un solo sistema de animación:** cada modelo queda fijo en una pose base y [`js/rig.js`](js/rig.js) lo anima por huesos, con poses escritas en los ejes del personaje. Así los seis tienen el mismo set de movimientos, aunque cada esqueleto sea distinto.
 - **Online sin servidor propio:** [`js/online.js`](js/online.js) conecta dos navegadores con WebRTC. El anfitrión simula la pelea y envía el estado 20 veces por segundo; el invitado manda sus toques y dibuja lo que recibe.
@@ -114,5 +122,6 @@ Las reglas básicas de estas mecánicas se pueden comprobar con `node tests/comb
 - Modelos 3D de Goku, Pikachu y Charizard: obtenidos de terceros, sin autoría registrada en este repositorio.
 - [Naruto Walking](https://sketchfab.com/3d-models/naruto-walking-3d-animation-by-sg-studio-505860183544421a898c132d09dcd2b7), de Nytherix (SG Studio); [Vegeta](https://sketchfab.com/3d-models/vegeta-d43230bed9964b9aaa7671b752e8d608), de Muhammad; y [Tanjiro Kamado](https://sketchfab.com/3d-models/tanjiro-kamado-from-demon-slayer-fully-rigged-0ab5b317b7654fd29255d22182537ded), de Light.k: [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Adaptados para el juego.
 - Modelo de respaldo de Vegeta, arena, efectos, música y sonidos: generados por código en este proyecto.
+- Piedra de la arena: [Rock Boulder Dry](https://polyhaven.com/a/rock_boulder_dry), de Dimitrios Savva y Rico Cilliers / Poly Haven, [CC0](https://polyhaven.com/license). Mapas 1K incluidos localmente; detalles en `assets/environment/CREDITS.md`. Powered by Poly Haven.
 - [Three.js](https://threejs.org) y [PeerJS](https://peerjs.com), con licencia MIT.
 - Tipografías [Bangers](https://fonts.google.com/specimen/Bangers) y [Rajdhani](https://fonts.google.com/specimen/Rajdhani), desde Google Fonts.

@@ -43,6 +43,13 @@ html, body {
 }
 
 .hidden { display: none !important; }
+#cinematic-frame { position: fixed; inset: 0; pointer-events: none; z-index: 2; }
+#cinematic-frame::before, #cinematic-frame::after { content: ''; position: absolute; left: 0; right: 0; height: 2.2vh; background: #090c13; transform: scaleY(0); transition: transform .35s ease; }
+#cinematic-frame::before { top: 0; transform-origin: top; }
+#cinematic-frame::after { bottom: 0; transform-origin: bottom; }
+.in-battle.ultimate-active #cinematic-frame::before, .in-battle.ultimate-active #cinematic-frame::after { transform: scaleY(1); }
+#util-bar .graphics-btn { width: auto; padding: 0 8px; font-size: 10px; letter-spacing: .08em; min-width: 64px; color: #f4ead5; }
+@media (prefers-reduced-motion: reduce) { #cinematic-frame { display: none; } }
 button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
 button:focus-visible { outline: 3px solid var(--ki-ready); outline-offset: 2px; }
 h1, h2 { font-weight: 400; }
@@ -334,7 +341,7 @@ body.in-battle #canvas-container, body.in-battle #canvas-container canvas, body.
     clip-path: inset(0 100% 0 0);
     animation: bandIn 620ms var(--ease-out) forwards;
 }
-.cutin-portrait { height: 150%; aspect-ratio: 1 / 1; background-size: cover; background-position: center 20%; flex: none; margin-top: -5%; }
+.cutin-portrait { height: 100%; aspect-ratio: 1 / 1; background-size: contain; background-repeat: no-repeat; background-position: center; flex: none; }
 .cutin-name {
     font-family: var(--font-display);
     font-size: clamp(2rem, 15vh, 5.4rem);

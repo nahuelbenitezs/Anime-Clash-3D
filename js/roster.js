@@ -26,7 +26,7 @@ const FIGHTER_STATS = {
         hitRadius: 0.8, attackRate: 1.05, dashCooldown: 0.75, height: 2.0, muzzleY: 1.2,
         aura: 0xff9e20,
         blast: { cost: 14, damage: 9, speed: 19, size: 0.4, cooldown: 0.48 },
-        ult: { name: 'RASENGAN', cost: 70, damage: 30, windup: 0.6, duration: 1.2, radius: 1.0, length: 20, color: 0x55caff },
+        ult: { name: 'RASENGAN', kind: 'vortex', cost: 70, damage: 30, windup: 0.6, duration: 1.2, radius: 1.0, length: 20, color: 0x55caff },
         ai: { range: 2.3, blastBias: 0.35, chargeBelow: 55, aggression: 0.8 },
     },
     tanjiro: {
@@ -34,7 +34,7 @@ const FIGHTER_STATS = {
         hitRadius: 0.8, attackRate: 1.05, dashCooldown: 0.8, height: 2.0, muzzleY: 1.2,
         aura: 0x38c5b5,
         blast: { cost: 15, damage: 9, speed: 18, size: 0.4, cooldown: 0.5 },
-        ult: { name: 'RESPIRACIÓN DEL AGUA', cost: 70, damage: 30, windup: 0.65, duration: 1.2, radius: 1.1, length: 20, color: 0x42bfff },
+        ult: { name: 'RESPIRACIÓN DEL AGUA', kind: 'water', cost: 70, damage: 30, windup: 0.65, duration: 1.2, radius: 1.1, length: 20, color: 0x42bfff },
         ai: { range: 2.4, blastBias: 0.3, chargeBelow: 55, aggression: 0.8 },
     },
     pikachu: {

@@ -66,7 +66,7 @@ class Game {
     // ─────────────────────────────────────────────
     initThree() {
         this.scene = new THREE.Scene();
-        this.scene.fog = new THREE.Fog(ARENA_COLORS.fog, 28, 90);
+        this.scene.fog = new THREE.Fog(window.inkColor(ARENA_COLORS.fog), 32, 130);
 
         const w = window.innerWidth, h = window.innerHeight;
         this.camera = new THREE.PerspectiveCamera(50, w / h, 0.1, 180);
@@ -78,17 +78,21 @@ class Game {
             stencil: false
         });
         this.renderer.setSize(w, h);
-        this.pixelRatio = Math.min(window.devicePixelRatio, 2);
+        this.pixelRatio = Math.min(window.devicePixelRatio, 1.5);
         this.renderer.setPixelRatio(this.pixelRatio);
         this.renderer.shadowMap.enabled = true;
-        this.renderer.shadowMap.type = THREE.PCFShadowMap;
+        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         this.renderer.outputEncoding = THREE.sRGBEncoding;
+        this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        this.renderer.toneMappingExposure = 1.0;
         this.container.appendChild(this.renderer.domElement);
 
-        const hemi = new THREE.HemisphereLight(0xffe2bd, 0x5c3a2c, 0.72);
+        const hemi = new THREE.HemisphereLight(0xc8dded, 0x775c50, 0.7);
         this.scene.add(hemi);
+        this.hemi = hemi;
+        this.lightStrength = 1;
 
-        const sun = new THREE.DirectionalLight(0xffe0b0, 1.0);
+        const sun = new THREE.DirectionalLight(0xffd3a3, 1.25);
         sun.position.set(-11, 18, 10);
         sun.castShadow = true;
         sun.shadow.mapSize.setScalar(1024);
@@ -99,13 +103,20 @@ class Game {
         sun.shadow.camera.near = 1;
         sun.shadow.camera.far = 60;
         sun.shadow.bias = -0.001;
+        sun.shadow.normalBias = 0.035;
         this.scene.add(sun);
 
         this.sun = sun;
+        const rim = new THREE.DirectionalLight(0x80d7ff, .8);
+        rim.position.set(6, 9, -14);
+        this.scene.add(rim);
+        this.rim = rim;
 
         this.vfx = new VFXManager(this.scene);
         this.arena = new Arena(this.scene);
         this.input = new InputManager();
+        this.presentation = new CinematicRenderer(this.renderer, this.scene, this.camera);
+        this.reducedMotion = this.presentation.reducedMotion;
 
         this.camTarget = new THREE.Vector3(0, 5.5, 17);
         this.camLookAt = new THREE.Vector3(0, 1.4, 0);
@@ -113,6 +124,9 @@ class Game {
 
         // Control de rendimiento: si el celular no llega, se baja la calidad sola
         this.perf = { frames: 0, time: 0, level: 0 };
+        let savedQuality = 'auto';
+        try { savedQuality = localStorage.getItem('anime-clash-graphics') || 'auto'; } catch (_) { /* private browser */ }
+        this.applyGraphics(savedQuality);
 
         window.addEventListener('resize', () => this.onResize());
     }
@@ -122,6 +136,28 @@ class Game {
         this.camera.updateProjectionMatrix();
         this.renderer.setSize(window.innerWidth, window.innerHeight);
         this.vfx.setViewportHeight(window.innerHeight * this.renderer.getPixelRatio());
+        if (this.presentation) this.presentation.resize();
+    }
+
+    applyGraphics(mode = 'auto') {
+        this.graphicsMode = ['auto', 'high', 'medium', 'low'].includes(mode) ? mode : 'auto';
+        const level = this.graphicsMode === 'auto' ? this.perf.level : { high: 0, medium: 1, low: 2 }[this.graphicsMode];
+        const q = [1, .72, .45, .3][level];
+        const maxDPR = this.graphicsMode === 'high' ? 2 : [1.5, 1.25, 1, 1][level];
+        this.pixelRatio = Math.min(window.devicePixelRatio || 1, maxDPR);
+        this.renderer.setPixelRatio(this.pixelRatio);
+        this.sun.castShadow = level < 2;
+        this.renderer.shadowMap.enabled = level < 2;
+        if (this.vfx.setQuality) this.vfx.setQuality(q); else this.vfx.quality = q;
+        this.arena.setQuality(q);
+        this.presentation.setQuality(q);
+        const btn = document.getElementById('btn-graphics');
+        if (btn) {
+            const name = { auto: 'AUTO', high: 'ALTA', medium: 'MEDIA', low: 'BAJA' }[this.graphicsMode];
+            btn.textContent = 'FX ' + name;
+            btn.setAttribute('aria-label', 'Calidad gráfica: ' + name + '. Pulsá para cambiar.');
+        }
+        this.onResize();
     }
 
     // Mide el promedio de cuadros y baja resolución, sombras y partículas por etapas.
@@ -134,22 +170,10 @@ class Game {
         perf.frames = 0;
         perf.time = 0;
         perf.fps = fps;
-        if (fps >= 42 || perf.level >= 3) return;
+        if (this.graphicsMode !== 'auto' || fps >= 42 || perf.level >= 3) return;
 
         perf.level++;
-        if (perf.level === 1) {
-            this.pixelRatio = Math.min(this.pixelRatio, 1.25);
-            this.renderer.setPixelRatio(this.pixelRatio);
-            this.vfx.quality = 0.7;
-        } else if (perf.level === 2) {
-            this.sun.castShadow = false;
-            this.renderer.shadowMap.enabled = false;
-            this.vfx.quality = 0.5;
-        } else {
-            this.pixelRatio = 1;
-            this.renderer.setPixelRatio(1);
-        }
-        this.onResize();
+        this.applyGraphics('auto');
     }
 
     // Antes de elegir luchador, los cuatro quedan posando detrás del título.
@@ -196,6 +220,13 @@ class Game {
         const quitBtn = document.getElementById('btn-quit-match');
         const soundBtn = document.getElementById('btn-sound');
         const fsBtn = document.getElementById('btn-fs');
+        const graphicsBtn = document.getElementById('btn-graphics');
+        graphicsBtn && graphicsBtn.addEventListener('click', () => {
+            const modes = ['auto', 'high', 'medium', 'low'];
+            const mode = modes[(modes.indexOf(this.graphicsMode) + 1) % modes.length];
+            this.applyGraphics(mode);
+            try { localStorage.setItem('anime-clash-graphics', mode); } catch (_) { /* private browser */ }
+        });
 
         soundBtn && soundBtn.addEventListener('click', () => {
             window.soundManager.init();
@@ -606,17 +637,24 @@ class Game {
         // para que ningún luchador quede afuera ni en un celular angosto.
         const halfWidth = gap / 2 + 2.6;
         const tanH = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2)) * this.camera.aspect;
-        const dist = Math.max(8.5, halfWidth / tanH);
-        const shake = this.vfx.cameraShakeOffset;
+        const dist = Math.max(10.5, halfWidth / tanH);
+        const shake = this.reducedMotion ? { x: 0, y: 0, z: 0 } : this.vfx.cameraShakeOffset;
+        const ultimate = this.player.state === 'ultimate' ? this.player : this.enemy.state === 'ultimate' ? this.enemy : null;
+        const energy = ultimate && !this.reducedMotion ? 1 : 0;
+        const fov = 50 - energy * 2;
+        if (Math.abs(this.camera.fov - fov) > .02) {
+            this.camera.fov += (fov - this.camera.fov) * (1 - Math.exp(-dt * 5));
+            this.camera.updateProjectionMatrix();
+        }
 
         this.camTarget.set(
             midX + shake.x,
-            2.4 + dist * 0.2 + shake.y,
+            2.4 + dist * (energy ? .1 : .13) + shake.y,
             midZ * 0.6 + dist + shake.z
         );
-        this.camLookAt.set(midX, 1.35, midZ * 0.6);
+        this.camLookAt.set(midX, 1.8, midZ * 0.6);
 
-        this.camera.position.lerp(this.camTarget, Math.min(1, dt * 5.5));
+        this.camera.position.lerp(this.camTarget, 1 - Math.exp(-dt * 5.5));
         this.camera.lookAt(this.camLookAt);
     }
 
@@ -821,6 +859,7 @@ class Game {
             this.checkRoundEnd(dt);
         }
 
+        if (this.vfx.updateFighterEffects) this.vfx.updateFighterEffects([this.player, this.enemy], dt, this.camera);
         this.vfx.update(dt, this.camera);
         this.tickTasks(rawDt);
         this.input.endFrame();
@@ -839,6 +878,7 @@ class Game {
             this.player.netTick(dt);
             this.enemy.netTick(dt);
         }
+        if (this.vfx.updateFighterEffects) this.vfx.updateFighterEffects([this.player, this.enemy], dt, this.camera);
         this.vfx.update(dt, this.camera);
         this.tickCombo(dt);
         this.refreshHUD();
@@ -849,7 +889,14 @@ class Game {
         requestAnimationFrame(() => this.animate());
         const dt = Math.min(this.clock.getDelta(), 0.08);
         this.step(dt);
-        this.renderer.render(this.scene, this.camera);
+        if (this.state !== 'paused') this.arena.update(dt);
+        const ultimate = [this.player, this.enemy].some(f => f && f.state === 'ultimate');
+        if (this.state !== 'paused') this.lightStrength += ((ultimate ? .62 : 1) - this.lightStrength) * (1 - Math.exp(-dt * 6));
+        this.sun.intensity = 1.25 * this.lightStrength;
+        this.hemi.intensity = .7 * this.lightStrength;
+        this.rim.intensity = .8 * (.7 + this.lightStrength * .3);
+        document.body.classList.toggle('ultimate-active', ultimate && this.state !== 'menu');
+        this.presentation.render(this.state === 'paused' ? 0 : dt, ultimate ? 1 : 0);
         if (this.state === 'fighting') this.watchPerformance(dt);
     }
 }

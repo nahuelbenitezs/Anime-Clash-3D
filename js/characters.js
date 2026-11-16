@@ -486,7 +486,7 @@ class Fighter {
         if (!validModels.includes(this.type)) return;
 
         window.modelLoader.loadModel(this.type, `assets/${this.type}.glb?v=${ASSET_VERSION}`, (data) => {
-            if (!data || !data.scene || this.isDead) return;
+            if (!data || !data.scene || this.isDead || this.disposed) return;
             this.onGLBModelLoaded(data);
         });
     }
@@ -1406,7 +1406,25 @@ class Fighter {
     }
 
     dispose() {
+        if (this.disposed) return;
+        this.disposed = true;
         this.setChargingSound(false);
+        if (this.baseMixer && this.glbModel) {
+            this.baseMixer.stopAllAction();
+            this.baseMixer.uncacheRoot(this.glbModel);
+        }
+        // Las geometrías y materiales GLB pertenecen a la caché; las texturas de
+        // huesos pertenecen a cada clon y deben liberarse al terminar la ronda.
+        const skeletons = new Set();
+        if (this.glbModel) this.glbModel.traverse(o => { if (o.skeleton) skeletons.add(o.skeleton); });
+        skeletons.forEach(skeleton => skeleton.dispose());
+        if (this.joints && this.joints.root) this.joints.root.traverse(o => {
+            if (o.geometry) o.geometry.dispose();
+            if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(material => {
+                if (material.map) material.map.dispose();
+                material.dispose();
+            });
+        });
         this.scene.remove(this.group);
     }
 
