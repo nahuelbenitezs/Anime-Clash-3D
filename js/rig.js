@@ -1,4 +1,4 @@
-// Rig de poses: anima por huesos a los seis luchadores con el mismo sistema.
+// Rig de poses: anima por huesos a todo el roster con el mismo sistema.
 //
 // Cada modelo trae huesos con ejes locales distintos, así que las poses se escriben
 // en los ejes del personaje (mira a +Z, +Y arriba, +X su izquierda) y se traducen a
@@ -44,6 +44,38 @@ const BONE_MAPS = {
     },
 };
 
+// Respaldo conservador para modelos nuevos: nombres completos conocidos, nunca
+// coincidencias parciales que podrían confundir brazos con controles o huesos twist.
+const HUMANOID_ALIASES = {
+    spine: ['spine', 'spine1', 'spine01', 'spine001', 'cspine1', '上半身'],
+    chest: ['spine2', 'spine02', 'spine002', 'chest', 'upperchest', 'cspine3', '上半身2'],
+    neck: ['neck', 'neck1', 'neck01', 'cneck1', '首'],
+    head: ['head', 'head1', 'chead1', '頭'],
+    armL: ['leftarm', 'leftupperarm', 'upperarml', 'upperarml1', 'lupperarm', 'lupperarm1', 'arml', 'larm', '左腕'],
+    foreL: ['leftforearm', 'leftlowerarm', 'lowerarml', 'lowerarml1', 'forearml', 'lforearm', 'lforearm1', '左ひじ'],
+    armR: ['rightarm', 'rightupperarm', 'upperarmr', 'upperarmr1', 'rupperarm', 'rupperarm1', 'armr', 'rarm', '右腕'],
+    foreR: ['rightforearm', 'rightlowerarm', 'lowerarmr', 'lowerarmr1', 'forearmr', 'rforearm', 'rforearm1', '右ひじ'],
+    legL: ['leftupleg', 'leftthigh', 'leftupperleg', 'upperlegl', 'thighl', 'lthigh', 'lthigh1', '左足'],
+    shinL: ['leftleg', 'leftshin', 'leftcalf', 'leftlowerleg', 'lowerlegl', 'calfl', 'shinl', 'lleg', 'lknee1', '左ひざ'],
+    legR: ['rightupleg', 'rightthigh', 'rightupperleg', 'upperlegr', 'thighr', 'rthigh', 'rthigh1', '右足'],
+    shinR: ['rightleg', 'rightshin', 'rightcalf', 'rightlowerleg', 'lowerlegr', 'calfr', 'shinr', 'rleg', 'rknee1', '右ひざ'],
+    handL: ['lefthand', 'handl', 'lhand', 'lhand1', '左手首'],
+    handR: ['righthand', 'handr', 'rhand', 'rhand1', '右手首'],
+    indexL: ['lefthandindex1', 'leftindex1', 'index01l', 'index1l', 'indexl1', '左人指1', '左人差指1'],
+    middleL: ['lefthandmiddle1', 'leftmiddle1', 'middle01l', 'middle1l', 'middlel1', '左中指1'],
+    ringL: ['lefthandring1', 'leftring1', 'ring01l', 'ring1l', 'ringl1', '左薬指1'],
+    pinkyL: ['lefthandpinky1', 'leftpinky1', 'pinky01l', 'pinky1l', 'pinkyl1', '左小指1'],
+    indexR: ['righthandindex1', 'rightindex1', 'index01r', 'index1r', 'indexr1', '右人指1', '右人差指1'],
+    middleR: ['righthandmiddle1', 'rightmiddle1', 'middle01r', 'middle1r', 'middler1', '右中指1'],
+    ringR: ['righthandring1', 'rightring1', 'ring01r', 'ring1r', 'ringr1', '右薬指1'],
+    pinkyR: ['righthandpinky1', 'rightpinky1', 'pinky01r', 'pinky1r', 'pinkyr1', '右小指1'],
+};
+
+function humanoidBoneName(name) {
+    // Namespaces de FBX y prefijos deform de Blender no identifican la articulación.
+    return name.split(':').pop().toLowerCase().replace(/^(?:mixamorig|armature[|_]|def[-_])/, '').replace(/[\s_.|\-]/g, '');
+}
+
 const _q = new THREE.Quaternion();
 const _qw = new THREE.Quaternion();
 const _e = new THREE.Euler();
@@ -72,7 +104,29 @@ class PoseRig {
         const all = [];
         model.traverse(o => { if (o.isBone) all.push(o); });
         const bones = {};
-        for (const key in map) bones[key] = all.find(b => b.name.startsWith(map[key])) || null;
+        if (map) {
+            for (const key in map) bones[key] = all.find(b => b.name.startsWith(map[key])) || null;
+        } else {
+            const names = new Map();
+            all.forEach(bone => {
+                const key = humanoidBoneName(bone.name);
+                const matches = names.get(key) || [];
+                matches.push(bone);
+                names.set(key, matches);
+            });
+            const used = new Set();
+            for (const key in HUMANOID_ALIASES) {
+                bones[key] = null;
+                for (const alias of HUMANOID_ALIASES[key]) {
+                    const matches = names.get(alias);
+                    if (matches && matches.length === 1 && !used.has(matches[0])) {
+                        bones[key] = matches[0];
+                        used.add(matches[0]);
+                        break;
+                    }
+                }
+            }
+        }
         return new PoseRig(model, bones);
     }
 
@@ -574,7 +628,165 @@ function charizardPose(f, t, c) {
     return { pose: p, body: h };
 }
 
-const POSE_FN = { goku: humanPose, vegeta: humanPose, naruto: humanPose, tanjiro: humanPose, pikachu: pikachuPose, charizard: charizardPose };
+// Estos detalles son opcionales: un rig sin dedos continúa usando las poses del brazo.
+function poseFist(pose, side, curl = 0.65) {
+    for (const finger of ['index', 'middle', 'ring', 'pinky']) pose[finger + side] = [-curl, 0, 0];
+}
+
+function gojoPose(f, t, c) {
+    const result = humanPose(f, t, c), p = result.pose, h = result.body;
+    const breath = sin(c * 2.7);
+    switch (f.state) {
+        case 'idle':
+            p.spine = [0, 0.03, sin(c * 1.2) * 0.012];
+            p.chest = [breath * 0.012, -0.06, 0];
+            p.armL = [0.07, 0, 0.025]; p.foreL = [-0.18, 0, 0];
+            p.armR = [-0.12, -0.05, -0.06]; p.foreR = [-0.38, 0, 0];
+            p.head = [-0.035, 0.06, -0.025];
+            p.legL = [0.03, 0, 0.035]; p.legR = [-0.03, 0, -0.035];
+            h.y = breath * 0.01 - 0.01;
+            break;
+        case 'run':
+            p.armL = [sin(c * 12.6) * 0.35, 0, 0.04];
+            p.armR = [-sin(c * 12.6) * 0.35, 0, -0.04];
+            p.foreL = [-0.35, 0, 0]; p.foreR = [-0.35, 0, 0];
+            p.spine = [0.12, sin(c * 12.6) * 0.065, 0];
+            break;
+        case 'guard':
+            // Infinity: una palma delante y la otra mano relajada.
+            p.armR = [-0.95, -0.1, -0.08]; p.foreR = [-0.35, 0, 0];
+            p.handR = [0.12, 0, 0];
+            p.armL = [-0.1, 0, 0.06]; p.foreL = [-0.4, 0, 0];
+            p.spine = [0.04, -0.08, 0]; p.head = [-0.03, 0.05, 0];
+            h.y = -0.015;
+            break;
+        case 'blast': {
+            const release = poseEase(t / 0.06);
+            p.armR = [-0.9 - release * 0.55, -0.08, -0.03];
+            p.foreR = [-0.4 * (1 - release), 0, 0];
+            p.armL = [0.1, 0, 0.03]; p.foreL = [-0.2, 0, 0];
+            p.handR = [0, 0, 0.08];
+            poseFist(p, 'R', 0.7);
+            p.indexR = [0, 0, 0]; p.middleR = [0, 0, 0];
+            p.chest = [0.015, 0.18, 0]; p.head = [-0.02, -0.08, 0];
+            h.z = -sin(Math.min(1, t / 0.3) * PI) * 0.025;
+            break;
+        }
+        case 'charge':
+            p.armL = [-0.55, -0.25, 0.23]; p.foreL = [-0.95, 0, 0];
+            p.armR = [-0.55, 0.25, -0.23]; p.foreR = [-0.95, 0, 0];
+            p.handL = [0, -0.15, 0.1]; p.handR = [0, 0.15, -0.1];
+            p.spine = [0, 0, 0]; p.head = [0.07, 0, 0];
+            h.y = breath * 0.012 - 0.025;
+            break;
+        case 'ultimate': {
+            const windup = Math.max(0.01, f.stats.ult.windup);
+            const merge = poseEase((t / windup - 0.25) / 0.65);
+            const firing = t >= windup;
+            if (!firing) {
+                // Azul y Rojo se acercan con las manos abiertas antes de liberar Púrpura.
+                p.armL = [-0.45 - merge * 0.65, -0.2, 0.55 * (1 - merge)];
+                p.armR = [-0.45 - merge * 0.65, 0.2, -0.55 * (1 - merge)];
+                p.foreL = [-0.8 + merge * 0.5, 0, 0]; p.foreR = [-0.8 + merge * 0.5, 0, 0];
+                p.handL = [0, -0.2, 0]; p.handR = [0, 0.2, 0];
+                p.chest = [0, -0.12 * (1 - merge), 0];
+                p.head = [0.04, 0, 0];
+                h.y = -0.03 + sin(c * 12) * 0.005 * merge;
+            } else {
+                const recoil = Math.exp(-(t - windup) * 10);
+                p.armR = [-1.5, -0.05, 0]; p.foreR = [-0.04, 0, 0];
+                p.handR = [0.08, 0, 0];
+                p.armL = [-0.3, 0, 0.1]; p.foreL = [-0.75, 0, 0];
+                p.chest = [0.03, 0.2, 0]; p.spine = [-recoil * 0.08, 0, 0];
+                p.head = [-0.03, -0.08, 0];
+                h.y = -0.025; h.z = -recoil * 0.07;
+            }
+            p.legL = [0.08, 0, 0.1]; p.legR = [-0.1, 0, -0.1];
+            break;
+        }
+    }
+    return result;
+}
+
+function luffyPose(f, t, c) {
+    const result = humanPose(f, t, c), p = result.pose, h = result.body;
+    poseFist(p, 'L'); poseFist(p, 'R');
+    switch (f.state) {
+        case 'idle': {
+            const bounce = sin(c * 3.8);
+            p.armL = [-0.45 + bounce * 0.035, 0, 0.15]; p.foreL = [-0.95, 0, 0];
+            p.armR = [-0.3 - bounce * 0.035, 0, -0.12]; p.foreR = [-1.05, 0, 0];
+            p.chest = [0.025, sin(c * 1.9) * 0.045, 0];
+            p.head = [-0.05, 0, bounce * 0.025];
+            p.shinL = [0.16, 0, 0]; p.shinR = [0.13, 0, 0];
+            h.y = -0.04 + bounce * 0.025;
+            break;
+        }
+        case 'run': {
+            const cycle = sin(c * 14.6);
+            p.armL = [cycle * 0.8 - 0.15, 0, 0.13];
+            p.armR = [-cycle * 0.8 - 0.15, 0, -0.13];
+            p.foreL = [-0.75, 0, 0]; p.foreR = [-0.75, 0, 0];
+            p.legL = [-cycle * 0.85, 0, 0.07]; p.legR = [cycle * 0.85, 0, -0.07];
+            p.shinL = [Math.max(0, sin(c * 14.6 + 0.6)) * 1.15, 0, 0];
+            p.shinR = [Math.max(0, -sin(c * 14.6 + 0.6)) * 1.15, 0, 0];
+            p.spine = [0.2, cycle * 0.12, -cycle * 0.05];
+            p.head = [-0.09, -cycle * 0.03, cycle * 0.03];
+            h.y = Math.abs(cycle) * 0.12;
+            break;
+        }
+        case 'attack': {
+            const { wind, hit } = strikePhase(f, t), side = f.animStep === 1 ? -1 : 1;
+            p.chest = [hit * 0.15, side * (-wind * 0.65 + hit * 0.85), -side * hit * 0.05];
+            p.spine = [hit * 0.1 - wind * 0.07, side * hit * 0.1, 0];
+            p[f.animStep === 1 ? 'armL' : 'armR'] = [wind * 0.75 - hit * 1.5, -side * hit * 0.1, 0];
+            p[f.animStep === 1 ? 'foreL' : 'foreR'] = [-wind * 1.2 - (1 - hit) * 0.1, 0, 0];
+            p[f.animStep === 1 ? 'armR' : 'armL'] = [-0.35, 0, side * 0.2];
+            p[f.animStep === 1 ? 'foreR' : 'foreL'] = [-1.15, 0, 0];
+            // Incluso el remate es un puñetazo: conserva su lectura de luchador de goma.
+            p.legL = [0.15, 0, 0.15]; p.legR = [-0.16, 0, -0.15];
+            p.shinL = [0.18, 0, 0]; p.shinR = [0.16, 0, 0];
+            h.y = -wind * 0.055 + hit * 0.07; h.z = hit * 0.19 - wind * 0.06;
+            break;
+        }
+        case 'guard':
+            p.armL = [-0.95, -0.12, 0.13]; p.foreL = [-1.1, 0, 0];
+            p.armR = [-0.85, 0.12, -0.13]; p.foreR = [-1.15, 0, 0];
+            p.chest = [0.05, 0.08, 0]; h.y = -0.07;
+            break;
+        case 'charge':
+            p.spine = [0.22, 0, 0]; p.chest = [-0.12, 0, 0];
+            p.armL = [0.3, 0, 0.35]; p.foreL = [-0.8, 0, 0];
+            p.armR = [0.3, 0, -0.35]; p.foreR = [-0.8, 0, 0];
+            p.head = [-0.15, 0, 0];
+            h.y = -0.1 + sin(c * 15) * 0.01;
+            break;
+        case 'ultimate': {
+            const windup = Math.max(0.01, f.stats.ult.windup), gather = poseEase(t / windup);
+            if (t < windup) {
+                p.chest = [-0.04, -0.45 - gather * 0.3, 0];
+                p.armR = [0.35 + gather * 0.65, -0.25, -0.15]; p.foreR = [-1.1, 0, 0];
+                p.armL = [-0.7, -0.15, 0.1]; p.foreL = [-0.5, 0, 0];
+                p.spine = [0.12, -gather * 0.2, 0];
+                p.head = [-0.12, 0.3, 0];
+                h.y = -0.09; h.z = -gather * 0.1;
+            } else {
+                const recoil = Math.exp(-(t - windup) * 8);
+                p.chest = [0.15, 0.5, -0.05]; p.spine = [0.16 - recoil * 0.12, 0.1, 0];
+                p.armR = [-1.5, -0.05, 0]; p.foreR = [-0.03, 0, 0]; p.handR = [0, 0, 0];
+                p.armL = [0.3, 0, 0.25]; p.foreL = [-0.9, 0, 0];
+                p.head = [-0.15, -0.12, 0];
+                h.z = 0.13 - recoil * 0.08; h.y = -0.045;
+            }
+            p.legL = [0.16, 0, 0.2]; p.legR = [-0.2, 0, -0.18];
+            p.shinL = [0.22, 0, 0]; p.shinR = [0.18, 0, 0];
+            break;
+        }
+    }
+    return result;
+}
+
+const POSE_FN = { goku: humanPose, vegeta: humanPose, naruto: humanPose, tanjiro: humanPose, gojo: gojoPose, luffy: luffyPose, pikachu: pikachuPose, charizard: charizardPose };
 
 // Velocidad con la que se llega a cada pose: los golpes son secos, el reposo es suave.
 const POSE_RATE = { attack: 34, blast: 30, dash: 26, hurt: 28, guard: 22, ultimate: 16, charge: 12, run: 14, ko: 7, idle: 9 };

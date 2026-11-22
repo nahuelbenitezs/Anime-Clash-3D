@@ -77,7 +77,19 @@ const ENERGY_FRAGMENT = `
         float heat = 0.4 + 0.3 * flow + 0.3 * ripples;
         float alpha = (0.12 + fresnel * 0.5 + helix * 0.65) * uOpacity;
         vec3 color = mix(uColor * 0.65, vec3(1.0), helix * 0.35 + fresnel * 0.12);
-        if (uMode > 2.5) {
+        if (uMode > 4.5) {
+            float veins = pow(max(0.0, sin(vUv.x * 38.0 + sin(vUv.y * 21.0 - uTime * 5.0))), 13.0);
+            color = mix(vec3(0.035, 0.012, 0.025), vec3(0.9, 0.035, 0.025), fresnel * 0.75 + veins * 0.75);
+            color += vec3(1.0, 0.25, 0.08) * pow(max(0.0, dot(normalize(vNormal), normalize(vec3(-0.4, 0.8, 0.6)))), 22.0) * 0.55;
+            alpha = uOpacity;
+        } else if (uMode > 3.5) {
+            float fusion = sin(vUv.x * 18.85 - uTime * 4.0 + sin(vUv.y * 17.0 + uTime * 2.0));
+            vec3 blue = vec3(0.055, 0.18, 1.0);
+            vec3 red = vec3(1.0, 0.03, 0.24);
+            color = mix(mix(blue, red, fusion * 0.5 + 0.5), vec3(0.64, 0.12, 1.0), 0.55);
+            color += vec3(0.55, 0.3, 0.8) * fresnel + helix * 0.14;
+            alpha = (0.6 + fresnel * 0.35) * uOpacity;
+        } else if (uMode > 2.5) {
             alpha *= (1.0 - smoothstep(0.4, 1.0, vUv.y)) * (0.2 + heat);
             color = mix(vec3(1.0, 0.12, 0.015), vec3(1.0, 0.85, 0.22), heat);
         } else if (uMode > 1.5) {
@@ -373,7 +385,7 @@ class VFXManager {
         const kind = config.kind || 'beam';
 
         const group = new THREE.Group();
-        const mode = kind === 'flame' ? 3 : kind === 'water' ? 2 : kind === 'vortex' ? 1 : 0;
+        const mode = kind === 'rubber' ? 5 : kind === 'hollow' ? 4 : kind === 'flame' ? 3 : kind === 'water' ? 2 : kind === 'vortex' ? 1 : 0;
         const shellMat = this.energyMaterial(color, mode, kind === 'water' ? .85 : .7);
         if (kind === 'water') shellMat.blending = THREE.NormalBlending;
         const coreMat = new THREE.MeshBasicMaterial({ color: kind === 'water' ? 0xb8f5ff : 0xffffff,
@@ -384,7 +396,7 @@ class VFXManager {
         const ink = new THREE.Mesh(kind === 'flame' ? this.shared.flame : this.shared.beam, outerMat);
         const shell = new THREE.Mesh(kind === 'flame' ? this.shared.flame : this.shared.beam, shellMat);
         const core = new THREE.Mesh(this.shared.beam, coreMat);
-        core.visible = kind !== 'water' && kind !== 'vortex';
+        core.visible = !['water', 'vortex', 'hollow', 'rubber'].includes(kind);
         const shapes = [ink, shell, core];
         shapes.forEach(m => { m.position.z = length / 2; group.add(m); });
 
@@ -418,11 +430,123 @@ class VFXManager {
             grow: 0,
             sparkTimer: 0,
         };
+        if (kind === 'hollow' || kind === 'rubber') this.decorateSpecialBeam(beam);
         this.beams.push(beam);
         this.shake(0.6);
         this.createShockwave(new THREE.Vector3(startPos.x, 0.05, startPos.z), color, 5);
         this.emitDust(new THREE.Vector3(startPos.x, .06, startPos.z), 18, 4);
         return beam;
+    }
+
+    // Geometrías compartidas: estos definitivos no añaden archivos ni rompen el
+    // volumen de daño que ya replica el anfitrión a través de la red.
+    decorateSpecialBeam(beam) {
+        if (beam.kind === 'hollow') {
+            const blueMat = this.energyMaterial(0x2255ff, 0, .8);
+            const redMat = this.energyMaterial(0xff164b, 0, .8);
+            const blue = new THREE.Mesh(this.shared.sphere, blueMat);
+            const red = new THREE.Mesh(this.shared.sphere, redMat);
+            beam.mesh.add(blue, red);
+            beam.special = { blue, red };
+            beam.ownMaterials.push(blueMat, redMat);
+            // La esfera tiene color propio aun bajo el sol; el halo es aditivo.
+            beam.shell.visible = false;
+            const orbMat = this.energyMaterial(beam.color, 4, .95);
+            orbMat.blending = THREE.NormalBlending;
+            beam.head.material = orbMat;
+            beam.ownMaterials.push(orbMat);
+        } else {
+            const fist = new THREE.Group();
+            const haki = this.energyMaterial(0xb92318, 5, .96);
+            haki.blending = THREE.NormalBlending;
+            const palm = new THREE.Mesh(this.shared.sphere, haki);
+            palm.scale.set(.75, .65, .72);
+            const thumb = new THREE.Mesh(this.shared.sphere, haki);
+            thumb.position.set(.59, -.27, .08);
+            thumb.scale.set(.28, .4, .42);
+            thumb.rotation.z = -.45;
+            fist.add(palm, thumb);
+            for (let i = 0; i < 4; i++) {
+                const knuckle = new THREE.Mesh(this.shared.sphere, haki);
+                knuckle.position.set((i - 1.5) * .34, .24, .48);
+                knuckle.scale.set(.23, .33, .28);
+                fist.add(knuckle);
+            }
+            const arm = new THREE.Mesh(this.shared.beam, haki);
+            beam.mesh.add(arm, fist);
+            beam.special = { fist, arm, haki };
+            beam.ownMaterials.push(haki);
+            beam.shell.visible = beam.ink.visible = beam.head.visible = false;
+            beam.headGlow.material.color.setHex(0xff672c);
+        }
+    }
+
+    updateSpecialBeam(beam, dt, len, fade, pulse) {
+        const r = beam.radius;
+        const elapsed = beam.duration - beam.life;
+        // El golpe recorre su alcance pronto y permanece extendido para que el
+        // telégrafo visual y el daño continuo sean fáciles de leer.
+        const travel = Math.min(1, elapsed / Math.min(.42, beam.duration * .45));
+        const z = Math.max(0, len - r * .55) * (1 - Math.pow(1 - travel, 3));
+        beam.headGlow.position.z = z;
+        beam.headGlow.material.opacity = (beam.kind === 'hollow' ? .32 : .18) * fade;
+        beam.headGlow.scale.setScalar(r * (beam.kind === 'hollow' ? 5 : 4) * pulse * fade);
+        beam.muzzle.scale.setScalar(r * 4 * pulse * fade);
+        beam.muzzle.material.opacity = .3 * fade;
+        beam.rings.forEach((ring, i) => {
+            const phase = (elapsed * 2.5 + i * .25) % 1;
+            ring.position.z = beam.kind === 'hollow' ? Math.max(0, z - phase * r * 2.6) : Math.min(z, len * phase);
+            const radius = r * (.65 + phase * .6) * fade;
+            ring.scale.set(radius, radius * (beam.kind === 'rubber' ? .9 : 1), 1);
+            ring.rotation.z = elapsed * 5 + i;
+            ring.rotation.y = beam.kind === 'hollow' ? elapsed * 3 + i * .8 : 0;
+            ring.visible = this.quality > .5;
+        });
+        beam.rings[0].material.opacity = (beam.kind === 'hollow' ? .24 : .4) * fade;
+        if (beam.kind === 'hollow') {
+            const fusion = Math.min(1, elapsed / .3);
+            const orbit = r * (1 - fusion) * .85;
+            const angle = elapsed * 13;
+            beam.head.position.z = z;
+            beam.head.scale.setScalar(r * (.55 + fusion * .6) * pulse * fade);
+            beam.head.material.uniforms.uTime.value = this.clock;
+            beam.head.material.uniforms.uOpacity.value = .95 * fade;
+            beam.head.rotation.z = elapsed * 2;
+            const special = beam.special;
+            special.blue.position.set(Math.cos(angle) * orbit, Math.sin(angle) * orbit, z + .04);
+            special.red.position.set(-Math.cos(angle) * orbit, -Math.sin(angle) * orbit, z - .04);
+            special.blue.scale.setScalar(r * (.36 - fusion * .16) * fade);
+            special.red.scale.copy(special.blue.scale);
+            special.blue.visible = special.red.visible = fusion < .98;
+            special.blue.material.uniforms.uTime.value = this.clock;
+            special.red.material.uniforms.uTime.value = -this.clock;
+            // Un rastro fino, sin dibujar un tubo blanco de extremo a extremo.
+            beam.ink.scale.set(r * .23 * fade, r * .23 * fade, Math.max(.01, z));
+            beam.ink.position.z = z / 2;
+            beam.ink.material.uniforms.uTime.value = this.clock;
+            beam.ink.material.uniforms.uOpacity.value = .045 * fade;
+        } else {
+            const special = beam.special;
+            special.haki.uniforms.uTime.value = this.clock;
+            special.haki.uniforms.uOpacity.value = .96 * fade;
+            special.fist.position.z = z;
+            special.fist.rotation.z = Math.sin(elapsed * 16) * .035;
+            special.fist.scale.setScalar(r * 1.05 * fade);
+            special.arm.scale.set(r * .36 * fade, r * .36 * fade, Math.max(.01, z));
+            special.arm.position.z = z / 2;
+        }
+        beam.sparkTimer += dt;
+        if (beam.sparkTimer > .045) {
+            beam.sparkTimer = 0;
+            const d = beam.direction;
+            const side = (Math.random() - .5) * r;
+            const pz = Math.max(0, z - Math.random() * r * 2);
+            const color = beam.kind === 'hollow' ? (Math.random() < .5 ? 0xb056ff : 0x445dff) : 0xff4b23;
+            this.spawn(beam.startPos.x + d.x * pz - d.z * side,
+                beam.startPos.y + (Math.random() - .5) * r,
+                beam.startPos.z + d.z * pz + d.x * side,
+                -d.x * 3, (Math.random() - .5) * 2, -d.z * 3, color, .45, .28, 0);
+        }
     }
 
     // ─────────────────────────────────────────────
@@ -478,6 +602,8 @@ class VFXManager {
         const aura = new THREE.Mesh(this.shared.sphere, auraMat);
         const orb = new THREE.Mesh(this.shared.sphere, orbMat);
         const halo = this.glow(0x55ccff, 3, .5);
+        const fusionBlue = new THREE.Mesh(this.shared.sphere, this.energyMaterial(0x215dff, 0, .8));
+        const fusionRed = new THREE.Mesh(this.shared.sphere, this.energyMaterial(0xff164b, 0, .8));
         const ringMat = new THREE.MeshBasicMaterial({ color: 0xffd700, transparent: true, opacity: .5,
             depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, toneMapped: false });
         const ring = new THREE.Mesh(this.shared.haloRing, ringMat);
@@ -495,10 +621,10 @@ class VFXManager {
         }
         const light = new THREE.PointLight(0x55ccff, 0, 7, 2);
         light.visible = this.quality > .5;
-        group.add(aura, orb, halo, ring, slash, light);
+        group.add(aura, orb, halo, ring, slash, light, fusionBlue, fusionRed);
         group.visible = false;
         this.scene.add(group);
-        return { group, aura, orb, halo, ring, slash, trails, light, auraMat, orbMat,
+        return { group, aura, orb, halo, ring, slash, trails, light, auraMat, orbMat, fusionBlue, fusionRed,
             fighter: null, lastState: '', timer: 0 };
     }
 
@@ -529,10 +655,24 @@ class VFXManager {
             fx.auraMat.uniforms.uOpacity.value = f.sparking ? .35 : windup ? .22 : .13;
             fx.orbMat.uniforms.uTime.value = this.clock * 1.4;
             fx.orbMat.uniforms.uColor.value.setHex(f.stats.ult.color);
+            fx.orbMat.uniforms.uMode.value = f.type === 'gojo' ? 4 : f.type === 'luffy' ? 5 : 1;
+            fx.orbMat.blending = f.type === 'gojo' || f.type === 'luffy' ? THREE.NormalBlending : THREE.AdditiveBlending;
             fx.orb.visible = windup;
             fx.halo.visible = windup;
             fx.orb.position.set(f.type === 'goku' && windup ? -.42 : 0, f.stats.muzzleY, windup ? .65 : .9);
             fx.orb.scale.setScalar((.16 + buildup * .45) * pulse);
+            fx.fusionBlue.visible = fx.fusionRed.visible = windup && f.type === 'gojo' && buildup < .8;
+            if (fx.fusionBlue.visible) {
+                const separation = .55 * (1 - buildup);
+                const orbitY = Math.sin(this.clock * 5) * .12;
+                fx.fusionBlue.position.set(-separation, f.stats.muzzleY + orbitY, .68);
+                fx.fusionRed.position.set(separation, f.stats.muzzleY - orbitY, .68);
+                fx.fusionBlue.scale.setScalar(.19);
+                fx.fusionRed.scale.setScalar(.19);
+                fx.fusionBlue.material.uniforms.uTime.value = this.clock;
+                fx.fusionRed.material.uniforms.uTime.value = -this.clock;
+                fx.orb.visible = buildup > .35;
+            }
             fx.halo.position.copy(fx.orb.position);
             fx.halo.material.color.setHex(f.stats.ult.color);
             fx.halo.scale.setScalar(1.1 + buildup * 2);
@@ -673,6 +813,11 @@ class VFXManager {
             mesh.scale.set(rad, rad, Math.max(0.01, len));
             mesh.position.z = len / 2;
         };
+
+        if (kind === 'hollow' || kind === 'rubber') {
+            this.updateSpecialBeam(beam, dt, len, fade, pulse);
+            return;
+        }
 
         beam.shell.material.uniforms.uTime.value = this.clock;
         beam.shell.material.uniforms.uOpacity.value = .7 * fade;
