@@ -412,7 +412,7 @@ class TextureGenerator {
 // Stylized 3D Fighter Entity
 class Fighter {
     constructor(type, isPlayer = false, scene, vfx, events = {}) {
-        this.type = type; // 'goku', 'pikachu', 'vegeta', 'charizard'
+        this.type = type;
         this.stats = FIGHTER_STATS[type];
         this.isPlayer = isPlayer;
         this.scene = scene;
@@ -476,7 +476,10 @@ class Fighter {
         this.glbHolder = null;
         this.bodyOffset = { y: 0, z: 0, rx: 0, ry: 0, rz: 0 };
         this.animClock = Math.random() * 10;
+        this.lastPosePosition = this.position.clone();
+        this.gait = { side: 0, forward: 0, phase: 0 };
         this.animStep = 0;
+        this.animSmash = false;
         this.tryLoadGLB();
     }
 
@@ -535,20 +538,23 @@ class Fighter {
         if (['naruto', 'tanjiro', 'vegeta', 'luffy', 'gojo'].includes(this.type)) {
             // Los modelos nuevos vienen en reposo o caminando, no en guardia.
             // Llevar ambos brazos a una pose base antes de aplicar las animaciones.
-            const rootRotation = this.glbHolder.getWorldQuaternion(new THREE.Quaternion());
-            const inverseRoot = rootRotation.clone().invert();
+            const inverseRoot = this.glbHolder.getWorldQuaternion(new THREE.Quaternion()).invert();
+            const aimJoint = (joint, next, target) => {
+                const direction = next.getWorldPosition(new THREE.Vector3())
+                    .sub(joint.getWorldPosition(new THREE.Vector3())).applyQuaternion(inverseRoot).normalize();
+                const adjustment = new THREE.Quaternion().setFromUnitVectors(direction, target.normalize());
+                const orientation = inverseRoot.clone().multiply(joint.getWorldQuaternion(new THREE.Quaternion()));
+                joint.quaternion.multiply(orientation.clone().invert().multiply(adjustment).multiply(orientation));
+            };
             for (const [side, sign] of [['L', 1], ['R', -1]]) {
-                const upper = this.rig.joints['arm' + side];
-                const lower = this.rig.joints['fore' + side];
+                const upper = this.rig.joints['arm' + side]?.bone;
+                const lower = this.rig.joints['fore' + side]?.bone;
                 if (!upper || !lower) continue;
-                this.glbHolder.updateMatrixWorld(true);
-                const direction = lower.bone.getWorldPosition(new THREE.Vector3())
-                    .sub(upper.bone.getWorldPosition(new THREE.Vector3()))
-                    .applyQuaternion(inverseRoot).normalize();
-                const target = new THREE.Vector3(sign * 0.25, -0.8, 0.45).normalize();
-                const adjustment = new THREE.Quaternion().setFromUnitVectors(direction, target);
-                const orientation = inverseRoot.clone().multiply(upper.bone.getWorldQuaternion(new THREE.Quaternion()));
-                upper.bone.quaternion.multiply(orientation.clone().invert().multiply(adjustment).multiply(orientation));
+                aimJoint(upper, lower, new THREE.Vector3(sign * 0.25, -0.8, 0.45));
+                const hand = this.rig.joints['hand' + side]?.bone;
+                if (hand && (this.type === 'luffy' || this.type === 'gojo')) {
+                    aimJoint(lower, hand, new THREE.Vector3(sign * 0.08, -0.4, 0.92));
+                }
             }
             this.rig = PoseRig.forModel(this.type, this.glbHolder);
         }
@@ -1097,6 +1103,7 @@ class Fighter {
 
         this.state = state;
         this.stateTimer = 0;
+        this.revengePoseTime = undefined;
     }
 
     setChargingSound(on) {
@@ -1136,6 +1143,8 @@ class Fighter {
         const step = this.comboStep;
         this.comboStep = (step + 1) % 3;
         this.animStep = step;
+        this.animSmash = false;
+        this.revengePoseTime = undefined;
         this.comboWindow = 0.7;
         this.attackCd = (step === 2 ? 0.55 : 0.3) / this.stats.attackRate * (this.sparking ? 0.75 : 1);
         this.pendingHit = { t: 0.1, step, target };
@@ -1158,6 +1167,8 @@ class Fighter {
         this.setAnimation('attack');
         this.stateTimer = 0;
         this.animStep = 2;
+        this.animSmash = true;
+        this.revengePoseTime = undefined;
         this.comboStep = 0;
         this.comboWindow = 0;
         this.attackCd = 0.85 / this.stats.attackRate;
@@ -1173,6 +1184,7 @@ class Fighter {
             target.dashInvuln > 0 || target.invuln > 0 || this.position.distanceTo(target.position) > 3.2) return false;
         this.ki -= 30;
         this.setAnimation('idle');
+        this.revengePoseTime = 0;
         this.invuln = 0.25;
         const dealt = target.receiveHit({ amount: 8 * this.stats.power, attacker: this, kind: 'melee' });
         if (dealt > 0 && this.events.onHit) this.events.onHit(this, target, dealt, { heavy: false, kind: 'melee' });
@@ -1255,12 +1267,14 @@ class Fighter {
         const point = opponent.position.clone().addScaledVector(forward, -1.5);
         if (Math.abs(point.x) > 10.8 || Math.abs(point.z) > 5.8) return false;
         this.position.copy(point);
+        if (this.lastPosePosition) this.lastPosePosition.copy(point);
         this.group.position.copy(point);
         this.rotationY = this.targetRotationY = Math.atan2(forward.x, forward.z);
         this.group.rotation.y = this.rotationY;
         this.velocity.set(0, 0, 0);
         this.dashDir.set(0, 0, 0);
         this.dragonDash = false;
+        this.dashAnimation = 'vanish';
         this.ki -= 25;
         this.dashCd = this.stats.dashCooldown;
         this.dashInvuln = 0.15;
@@ -1280,6 +1294,7 @@ class Fighter {
         if (dist < 2 || !this.dash(dx, dz, opponent)) return false;
         this.ki -= 15;
         this.dragonDash = true;
+        this.dashAnimation = 'pursuit';
         this.dashInvuln = 0.1;
         return true;
     }
@@ -1296,6 +1311,7 @@ class Fighter {
         if (len < 0.001) { mx = this.isPlayer ? -1 : 1; mz = 0; len = 1; }
 
         this.dragonDash = false;
+        this.dashAnimation = 'dodge';
         this.dashDir.set(mx / len, 0, mz / len);
         this.dashCd = this.stats.dashCooldown;
         this.dashInvuln = 0.2;
@@ -1332,6 +1348,11 @@ class Fighter {
     // ─────────────────────────────────────────────
     //  RECIBIR DAÑO
     // ─────────────────────────────────────────────
+    setHitReaction(dx, dz, weight) {
+        const cos = Math.cos(this.rotationY), sin = Math.sin(this.rotationY);
+        this.hitReaction = { side: dx * cos - dz * sin, forward: dx * sin + dz * cos, weight, age: 0 };
+    }
+
     // Devuelve el daño aplicado (0 si esquivó). `continuous` son los rayos, que
     // pegan por tick y no generan aturdimiento ni invulnerabilidad.
     receiveHit({ amount, attacker, heavy = false, kind = 'melee', continuous = false, smash = false }) {
@@ -1348,11 +1369,13 @@ class Fighter {
             // Un bloqueo recién activado desvía un golpe frontal y abre al rival.
             if (!continuous && kind === 'melee' && this.perfectGuard > 0 && front > 0.25) {
                 this.perfectGuard = 0;
+                this.setHitReaction(pushDir.x, pushDir.z, 0.4);
                 this.ki = Math.min(this.maxKi, this.ki + 5);
                 attacker.pendingHit = null;
                 if (attacker.canAct()) {
                     attacker.setAnimation('hurt');
                     attacker.hurtDuration = 0.35;
+                    attacker.setHitReaction(-pushDir.x, -pushDir.z, 0.75);
                     attacker.velocity.addScaledVector(pushDir, -8);
                 }
                 if (this.events.onBlock) this.events.onBlock(this, true);
@@ -1363,7 +1386,10 @@ class Fighter {
                 const dealt = amount * (continuous ? 0.35 : 0.25);
                 this.health = Math.max(0, this.health - dealt);
                 this.ki = Math.min(this.maxKi, this.ki + (continuous ? 0.2 : 3));
-                if (!continuous) this.velocity.addScaledVector(pushDir, 4);
+                if (!continuous) {
+                    this.velocity.addScaledVector(pushDir, 4);
+                    this.setHitReaction(pushDir.x, pushDir.z, 0.65);
+                }
                 if (this.events.onBlock && !continuous) this.events.onBlock(this);
                 if (this.health <= 0) this.die();
                 return dealt;
@@ -1380,6 +1406,7 @@ class Fighter {
             this.setAnimation('hurt');
             this.stateTimer = 0;
             this.hurtDuration = heavy ? 0.5 : 0.26;
+            this.setHitReaction(pushDir.x, pushDir.z, smash ? 1.25 : heavy ? 1 : 0.55);
             this.velocity.addScaledVector(pushDir, smash ? 21 : heavy ? 15 : 4);
             // Tras el golpe final hay un respiro para que no existan combos infinitos
             this.invuln = heavy ? 0.7 : 0;
@@ -1556,12 +1583,11 @@ class Fighter {
 
     // Online, en el invitado: estado recibido del anfitrión
     setNetTarget(data, stateNames) {
-        const [x, z, rot, stateIdx, timer, step, hp, ki, invuln, sparking] = data;
+        const [x, z, rot, stateIdx, timer, step, hp, ki, invuln, sparking, anim] = data;
         this.sparking = !!sparking;
         this.netTarget = { x, z, rot };
         this.health = hp;
         this.ki = ki;
-        this.animStep = step;
         this.netInvuln = invuln;
         const state = stateNames[stateIdx] || 'idle';
         if (state !== this.state) {
@@ -1569,6 +1595,18 @@ class Fighter {
             if (state === 'charge') this.setChargingSound(true);
             this.state = state;
             this.stateTimer = timer;
+        } else if ((state === 'attack' && (step !== this.animStep || timer + 0.09 < this.stateTimer)) ||
+            (state === 'hurt' && timer + 0.09 < this.stateTimer)) {
+            this.stateTimer = timer;
+        }
+        this.animStep = step;
+        if (anim) {
+            const [smash, dash, hit, revenge, hurtDuration] = anim;
+            this.animSmash = !!smash;
+            this.dashAnimation = dash;
+            this.hitReaction = hit ? { side: hit[0], forward: hit[1], weight: hit[2], age: hit[3] } : undefined;
+            this.revengePoseTime = revenge ?? undefined;
+            if (hurtDuration) this.hurtDuration = hurtDuration;
         }
         this.isDead = state === 'ko';
     }
@@ -1578,7 +1616,11 @@ class Fighter {
         const n = this.netTarget;
         if (n) {
             const k = 1 - Math.exp(-16 * dt);
-            if (Math.hypot(n.x - this.position.x, n.z - this.position.z) > 4) this.position.set(n.x, 0, n.z);
+            if (Math.hypot(n.x - this.position.x, n.z - this.position.z) > 4 ||
+                (this.state === 'dash' && this.dashAnimation === 'vanish')) {
+                this.position.set(n.x, 0, n.z);
+                if (this.lastPosePosition) this.lastPosePosition.copy(this.position);
+            }
             this.position.x += (n.x - this.position.x) * k;
             this.position.z += (n.z - this.position.z) * k;
             let delta = n.rot - this.rotationY;
@@ -1600,9 +1642,33 @@ class Fighter {
         this.animClock += dt;
         if (!this.rig) { this.applyProceduralAnimation(dt); return; }
 
+        // Medir los pasos una vez resueltos los bordes y el choque con el rival.
+        // El invitado obtiene el mismo dato a partir de sus posiciones interpoladas.
+        const { x, z } = this.position;
+        const dx = x - this.lastPosePosition.x, dz = z - this.lastPosePosition.z;
+        this.lastPosePosition.copy(this.position);
+        const distance = Math.hypot(dx, dz);
+        const speed = dt > 0 && distance < this.speed * 5 * dt ? Math.min(distance / (this.speed * dt), 1.3) : 0;
+        const cos = Math.cos(this.rotationY), sin = Math.sin(this.rotationY);
+        const scale = distance > 0 ? speed / distance : 0;
+        const gaitBlend = 1 - Math.exp(-22 * dt);
+        const gait = this.gait;
+        gait.side += ((dx * cos - dz * sin) * scale - gait.side) * gaitBlend;
+        gait.forward += ((dx * sin + dz * cos) * scale - gait.forward) * gaitBlend;
+        if (this.state === 'run' || this.state === 'guard') gait.phase = (gait.phase + speed * 15 * dt) % (2 * Math.PI);
+
         const { pose, body } = POSE_FN[this.type](this, this.stateTimer, this.animClock);
-        const blend = 1 - Math.exp(-(POSE_RATE[this.state] || 10) * dt);
+        const reacting = this.hitReaction && this.hitReaction.age < 0.08 && this.state === 'guard';
+        const blend = 1 - Math.exp(-(reacting || this.revengePoseTime != null ? 34 : POSE_RATE[this.state] || 10) * dt);
         this.rig.apply(pose, blend);
+        if (this.revengePoseTime != null) {
+            this.revengePoseTime += dt;
+            if (this.revengePoseTime > 0.24) this.revengePoseTime = undefined;
+        }
+        if (this.hitReaction) {
+            this.hitReaction.age += dt;
+            if (this.hitReaction.age > 0.55) this.hitReaction = undefined;
+        }
 
         // El giro completo del coletazo no se suaviza: tiene que dar la vuelta entera
         const b = this.bodyOffset;

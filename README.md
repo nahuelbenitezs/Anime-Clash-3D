@@ -77,10 +77,10 @@ La arena incluye acantilados y ruinas 3D, texturas físicas de piedra, suelo gra
 
 El botón **FX AUTO** recorre calidad automática, alta, media y baja, y guarda la preferencia. En automática se reducen resolución, sombras, atmósfera y efectos si cae el rendimiento. Media conserva el bloom; baja lo desactiva. El movimiento de cámara y las líneas de velocidad se reducen con la preferencia del sistema para reducir movimiento.
 
-Con el servidor local activo, `tests/visual-lab.html` permite ver cada luchador, sus efectos y guardar capturas. `node tests/graphics-check.cjs` comprueba expiración y limpieza de efectos en doce reinicios de ronda, y poses finitas para los seis luchadores. La validación de rendimiento en teléfonos reales sigue pendiente.
+Con el servidor local activo, `tests/visual-lab.html` permite probar el desplazamiento, la esquiva, la guardia y los ataques de cualquier luchador, además de guardar capturas. `node tests/graphics-check.cjs` comprueba la limpieza de efectos en doce reinicios de ronda y las poses de los ocho luchadores.
 
 - **Three.js r128 sin compiladores:** JavaScript directo, servido por GitHub Pages. Three.js y Draco están en `vendor/` para que el juego no dependa de otros servidores.
-- **Un solo sistema de animación:** cada modelo queda fijo en una pose base y [`js/rig.js`](js/rig.js) lo anima por huesos, con poses escritas en los ejes del personaje. Así los seis tienen el mismo set de movimientos, aunque cada esqueleto sea distinto.
+- **Animación por huesos:** [`js/rig.js`](js/rig.js) adapta las poses al esqueleto de cada luchador. Las zancadas siguen la dirección y la distancia recorrida. En los humanoides, las muñecas siguen objetivos que permiten ajustar la trayectoria de los golpes y la postura de la guardia conservando la longitud de los brazos.
 - **Online sin servidor propio:** [`js/online.js`](js/online.js) conecta dos navegadores con WebRTC. El anfitrión simula la pelea y envía el estado 20 veces por segundo; el invitado manda sus toques y dibuja lo que recibe.
 - **Lógica separada del dibujo:** toda la pelea corre en `Game.step(dt)`. Por eso la pausa detiene el tiempo de verdad y se pueden simular cientos de peleas en segundos.
 - **Equilibrio medido:** los números de [`js/roster.js`](js/roster.js) se ajustaron simulando peleas de CPU contra CPU entre todos los luchadores.

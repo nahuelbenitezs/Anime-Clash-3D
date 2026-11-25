@@ -55,3 +55,38 @@ for (const type of ['gojo', 'luffy']) {
     assert.equal(rival.health, rival.maxHealth - caster.stats.ult.damage, 'aplica un solo impacto');
 }
 console.log('OK: Púrpura y King Kong Gun alcanzan al rival y aplican un solo impacto');
+
+// La cadencia depende del recorrido real y la dirección queda en los ejes del luchador.
+const walker = fighter(-1);
+const dt = 1 / 60;
+Object.assign(walker, {
+    state: 'run', animClock: 0, lastPosePosition: walker.position.clone(), gait: { side: 0, forward: 0, phase: 0 },
+    rig: { apply() {} }, glbHolder: new THREE.Group(),
+});
+function poseFrame() { Fighter.prototype.updatePose.call(walker, dt); }
+walker.position.z += walker.speed * dt;
+poseFrame();
+assert(walker.gait.side < 0 && Math.abs(walker.gait.forward) < 1e-10, 'el desplazamiento lateral respeta la orientación');
+const lastStep = walker.gait.phase;
+poseFrame();
+assert.equal(walker.gait.phase, lastStep, 'no avanza el ciclo al quedarse contra una pared');
+walker.position.x += 8;
+poseFrame();
+assert.equal(walker.gait.phase, lastStep, 'el teletransporte no cuenta como una zancada');
+walker.state = 'guard';
+walker.position.x -= walker.speed * dt * 0.3;
+poseFrame();
+assert(walker.gait.forward < 0 && walker.gait.phase > lastStep, 'los pasos en guardia conservan su dirección y avanzan el ciclo');
+
+const host = fighter(-1), observer = fighter(-1);
+host.ki = 100;
+assert(host.smash(fighter(1)));
+observer.setNetTarget(packFighter(host), NET_STATES);
+assert(observer.animSmash, 'el invitado distingue el golpe de impacto de un remate de combo');
+host.setAnimation('hurt');
+host.hurtDuration = 0.5;
+host.setHitReaction(-1, 0, 1);
+observer.setNetTarget(packFighter(host), NET_STATES);
+assert.equal(observer.hurtDuration, 0.5);
+assert.equal(observer.hitReaction.forward, -1);
+console.log('OK: pasos direccionales, saltos de posición y estados de animación online');

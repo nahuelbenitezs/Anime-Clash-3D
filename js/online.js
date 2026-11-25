@@ -22,10 +22,15 @@ function round2(n) {
 }
 
 function packFighter(f) {
+    const reaction = f.hitReaction;
+    const dash = f.state === 'dash' ? f.dashAnimation : null;
+    const smash = f.state === 'attack' && f.animSmash ? 1 : 0;
     return [
         round2(f.position.x), round2(f.position.z), round2(f.rotationY),
         NET_STATES.indexOf(f.state), round2(f.stateTimer), f.animStep,
         round2(f.health), round2(f.ki), f.invuln > 0 ? 1 : 0, f.sparking ? 1 : 0,
+        [smash, dash, reaction && [round2(reaction.side), round2(reaction.forward), reaction.weight, round2(reaction.age)],
+            f.revengePoseTime == null ? null : round2(f.revengePoseTime), f.state === 'hurt' ? f.hurtDuration : null],
     ];
 }
 
