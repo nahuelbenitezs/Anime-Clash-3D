@@ -15,10 +15,12 @@ function runLoadingScreen(onComplete) {
     const bar  = document.getElementById('load-bar');
     const text = document.getElementById('load-text');
     text.textContent = 'Cargando luchadores...';
-    window.modelLoader.preload(['goku', 'vegeta', 'naruto', 'tanjiro', 'pikachu', 'charizard'], (progress) => {
+    const types = Object.keys(FIGHTER_STATS);
+    document.querySelectorAll('[data-roster-count]').forEach(el => { el.textContent = types.length; });
+    window.modelLoader.preload(types, (progress) => {
         bar.style.width = Math.round(progress * 100) + '%';
     }).then(() => {
-        window.portraits = window.makePortraits(Object.keys(FIGHTER_STATS));
+        window.portraits = window.makePortraits(types);
         // No ampliamos los modelos de respaldo si falló la descarga de un GLB.
         if (window.modelLoader.cache.goku) document.getElementById('title-hero').style.backgroundImage = `url(${window.portraits.goku})`;
         if (window.modelLoader.cache.vegeta) document.getElementById('title-rival').style.backgroundImage = `url(${window.portraits.vegeta})`;
@@ -120,7 +122,7 @@ document.addEventListener('DOMContentLoaded', () => {
 //  Pantalla de selección: se arma con las estadísticas reales del roster
 // ─────────────────────────────────────────────────
 function statPercents(s) {
-    const pct = (v, min, max) => Math.round(25 + 75 * (v - min) / (max - min));
+    const pct = (v, min, max) => Math.round(Math.max(0, Math.min(100, 25 + 75 * (v - min) / (max - min))));
     return [
         ['VID', pct(s.hp, 120, 152)],
         ['FUE', pct(s.power, 0.9, 1.1)],
@@ -139,7 +141,29 @@ function setRosterSelection(rosterId, type) {
     const fighter = FIGHTER_STATS[type];
     if (feature && fighter) {
         feature.style.setProperty('--fighter-color', '#' + fighter.aura.toString(16).padStart(6, '0'));
-        feature.innerHTML = `<strong>${fighter.label}</strong><span>DEFINITIVO <b>${fighter.ult.name}</b></span>`;
+        feature.replaceChildren();
+        const identity = document.createElement('div');
+        identity.className = 'feature-identity';
+        const name = document.createElement('strong');
+        name.textContent = fighter.label;
+        const style = document.createElement('span');
+        style.className = 'feature-style';
+        style.textContent = fighter.style || 'COMBATE EN LA ARENA';
+        identity.append(name, style);
+        const skills = document.createElement('div');
+        skills.className = 'feature-skills';
+        [['RÁFAGA', fighter.blast.name || 'RÁFAGA DE KI', fighter.blast.cost],
+         ['DEFINITIVO', fighter.ult.name, fighter.ult.cost]].forEach(([label, title, cost]) => {
+            const skill = document.createElement('div');
+            skill.className = 'feature-skill';
+            const caption = document.createElement('span');
+            caption.textContent = `${label} · ${cost} KI`;
+            const titleEl = document.createElement('b');
+            titleEl.textContent = title;
+            skill.append(caption, titleEl);
+            skills.appendChild(skill);
+        });
+        feature.append(identity, skills);
     }
 }
 window.setRosterSelection = setRosterSelection;
@@ -152,11 +176,12 @@ function buildRoster(rosterId, selected, onChange) {
         const tile = document.createElement('button');
         tile.className = 'char-tile' + (type === selected ? ' selected' : '');
         tile.dataset.char = type;
-        tile.setAttribute('aria-label', s.label);
+        tile.type = 'button';
+        tile.setAttribute('aria-label', `${s.label}. ${s.style || 'Luchador'}. Definitivo: ${s.ult.name}`);
         tile.setAttribute('aria-pressed', String(type === selected));
         tile.style.setProperty('--tile', '#' + s.aura.toString(16).padStart(6, '0'));
         const stats = statPercents(s).map(([k, v]) => `<span class="stat-row">${k}<b style="--pct:${v}%"></b></span>`).join('');
-        tile.innerHTML = `<div class="tile-art" style="background-image:url(${window.portraits[type]})"></div>
+        tile.innerHTML = `<div class="tile-art" aria-hidden="true" style="background-image:url(${window.portraits[type]})"></div>
             <div class="tile-name">${s.label}</div>
             <div class="tile-stats">${stats}</div>`;
         tile.addEventListener('click', () => {

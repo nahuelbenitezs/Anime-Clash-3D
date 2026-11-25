@@ -482,9 +482,6 @@ class Fighter {
 
     tryLoadGLB() {
         if (!window.modelLoader) return;
-        const validModels = ['goku', 'vegeta', 'naruto', 'tanjiro', 'pikachu', 'charizard'];
-        if (!validModels.includes(this.type)) return;
-
         window.modelLoader.loadModel(this.type, `assets/${this.type}.glb?v=${ASSET_VERSION}`, (data) => {
             if (!data || !data.scene || this.isDead || this.disposed) return;
             this.onGLBModelLoaded(data);
@@ -535,7 +532,7 @@ class Fighter {
             model.position.applyAxisAngle(new THREE.Vector3(0, 1, 0), base.yaw);
         }
         this.rig = PoseRig.forModel(this.type, this.glbHolder);
-        if (['naruto', 'tanjiro', 'vegeta'].includes(this.type)) {
+        if (['naruto', 'tanjiro', 'vegeta', 'luffy', 'gojo'].includes(this.type)) {
             // Los modelos nuevos vienen en reposo o caminando, no en guardia.
             // Llevar ambos brazos a una pose base antes de aplicar las animaciones.
             const rootRotation = this.glbHolder.getWorldQuaternion(new THREE.Quaternion());
@@ -562,7 +559,7 @@ class Fighter {
     }
 
     buildModel() {
-        if (this.type === 'goku' || this.type === 'naruto' || this.type === 'tanjiro') this.buildGoku();
+        if (['goku', 'naruto', 'tanjiro', 'gojo', 'luffy'].includes(this.type)) this.buildGoku();
         else if (this.type === 'pikachu') this.buildPikachu();
         else if (this.type === 'vegeta') this.buildVegeta();
         else if (this.type === 'charizard') this.buildCharizard();
@@ -1218,7 +1215,8 @@ class Fighter {
         const spawnPos = this.position.clone().addScaledVector(dir, 0.8);
         spawnPos.y = this.stats.muzzleY;
         this.vfx.spawnProjectile(this, spawnPos, dir, {
-            color: this.auraColor, damage: b.damage, speed: b.speed, size: b.size,
+            color: b.color ?? this.auraColor, damage: b.damage, speed: b.speed, size: b.size,
+            kind: b.kind, range: b.range,
         });
         return true;
     }

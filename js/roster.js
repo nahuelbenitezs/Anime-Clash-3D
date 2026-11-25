@@ -57,6 +57,24 @@ const FIGHTER_STATS = {
         ult: { name: 'LANZALLAMAS', kind: 'flame', cost: 80, damage: 32, windup: 0.7, duration: 1.5, radius: 1.7, length: 15, color: 0xff7a1a },
         ai: { range: 2.8, blastBias: 0.3, chargeBelow: 65, aggression: 0.75 },
     },
+    gojo: {
+        label: 'GOJO', style: 'Control a distancia',
+        hp: 136, speed: 6.8, power: 1, reach: 2.4, kiCharge: 27,
+        hitRadius: 0.78, attackRate: 1.02, dashCooldown: 0.8, height: 2.12, muzzleY: 1.36,
+        aura: 0xba80ff,
+        blast: { name: 'Rojo', kind: 'red', color: 0xff3257, cost: 17, damage: 12, speed: 21, size: 0.46, cooldown: 0.6 },
+        ult: { name: 'PÚRPURA', kind: 'hollow', cost: 77, damage: 36, windup: 0.85, duration: 1.25, radius: 1.35, length: 22, color: 0xb252ff },
+        ai: { range: 3.9, blastBias: 0.55, chargeBelow: 58, aggression: 0.66 },
+    },
+    luffy: {
+        label: 'LUFFY', style: 'Golpes elásticos',
+        hp: 145, speed: 7.35, power: 1.04, reach: 2.75, kiCharge: 22,
+        hitRadius: 0.79, attackRate: 1.06, dashCooldown: 0.78, height: 2.03, muzzleY: 1.24,
+        aura: 0xff783c,
+        blast: { name: 'Gomu Gomu: Pistola', kind: 'rubber-shot', color: 0xff783c, range: 5.7, cost: 13, damage: 11, speed: 27, size: 0.45, cooldown: 0.57 },
+        ult: { name: 'KING KONG GUN', kind: 'rubber', cost: 73, damage: 34, windup: 0.72, duration: 1.0, radius: 1.48, length: 10.8, color: 0xff5033 },
+        ai: { range: 2.7, blastBias: 0.42, chargeBelow: 52, aggression: 0.93 },
+    },
 };
 
 window.FIGHTER_STATS = FIGHTER_STATS;

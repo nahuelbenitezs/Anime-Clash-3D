@@ -4,6 +4,8 @@ const PORTRAIT_FRAME = {
     goku: { x: 0, y: 1.5, dist: 2.2, turn: 0.45 },
     naruto: { x: 0, y: 1.5, dist: 2.2, turn: 0.4 },
     tanjiro: { x: 0, y: 1.5, dist: 2.2, turn: 0.4 },
+    gojo: { x: 0, y: 1.56, dist: 2.35, turn: 0.3 },
+    luffy: { x: 0, y: 1.48, dist: 2.45, turn: 0.35 },
     vegeta: { x: 0, y: 1.66, dist: 2.2, turn: 0.4 },
     pikachu: { x: 0, y: 0.95, dist: 2.3, turn: 0.3 },
     charizard: { x: -0.1, y: 2.3, dist: 4.4, turn: 0.1 },
@@ -29,7 +31,8 @@ function makePortraits(types) {
     const noVfx = { emitAura() {}, emitLightning() {} };
     types.forEach(type => {
         const fighter = new Fighter(type, true, scene, noVfx, {});
-        const frame = PORTRAIT_FRAME[type];
+        const height = FIGHTER_STATS[type].height;
+        const frame = PORTRAIT_FRAME[type] || { x: 0, y: height * 0.73, dist: height * 1.12, turn: 0.3 };
         fighter.group.position.set(0, 0, 0);
         fighter.group.rotation.y = frame.turn;
         fighter.updatePose(1);

@@ -28,6 +28,25 @@ const BONE_MAPS = {
         armL: 'L_UpperArm_1', foreL: 'L_Forearm_1', armR: 'R_UpperArm_1', foreR: 'R_Forearm_1',
         legL: 'L_Thigh_1', shinL: 'L_Knee_1', legR: 'R_Thigh_1', shinR: 'R_Knee_1',
     },
+    luffy: {
+        spine: 'mixamorigSpine_', chest: 'mixamorigSpine2_', neck: 'mixamorigNeck_', head: 'mixamorigHead_',
+        armL: 'mixamorigLeftArm_', foreL: 'mixamorigLeftForeArm_', armR: 'mixamorigRightArm_', foreR: 'mixamorigRightForeArm_',
+        legL: 'mixamorigLeftUpLeg_', shinL: 'mixamorigLeftLeg_', legR: 'mixamorigRightUpLeg_', shinR: 'mixamorigRightLeg_',
+        handL: 'mixamorigLeftHand_', handR: 'mixamorigRightHand_',
+        indexL: 'mixamorigLeftHandIndex1_', middleL: 'mixamorigLeftHandMiddle1_',
+        ringL: 'mixamorigLeftHandRing1_', pinkyL: 'mixamorigLeftHandPinky1_',
+        indexR: 'mixamorigRightHandIndex1_', middleR: 'mixamorigRightHandMiddle1_',
+        ringR: 'mixamorigRightHandRing1_', pinkyR: 'mixamorigRightHandPinky1_',
+    },
+    gojo: {
+        // GLTFLoader elimina los puntos del metarig (upper_arm.L -> upper_armL).
+        spine: 'spine001_', chest: 'spine003_', neck: 'spine005_', head: 'spine006_',
+        armL: 'upper_armL_', foreL: 'forearmL_', armR: 'upper_armR_', foreR: 'forearmR_',
+        legL: 'thighL_', shinL: 'shinL_', legR: 'thighR_', shinR: 'shinR_',
+        handL: 'handL_', handR: 'handR_',
+        indexL: 'f_index01L_', middleL: 'f_middle01L_', ringL: 'f_ring01L_', pinkyL: 'f_pinky01L_',
+        indexR: 'f_index01R_', middleR: 'f_middle01R_', ringR: 'f_ring01R_', pinkyR: 'f_pinky01R_',
+    },
     pikachu: {
         spine: 'Spine1_', chest: 'Spine2_', head: 'Head_',
         armL: 'LArm_', foreL: 'LForeArm_', armR: 'RArm_', foreR: 'RForeArm_',

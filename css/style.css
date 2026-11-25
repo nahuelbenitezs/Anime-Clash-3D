@@ -194,7 +194,7 @@ h1, h2 { font-weight: 400; }
     color: var(--accent);
     text-shadow: 2px 2px 0 var(--ink);
 }
-.char-roster { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(3px, 0.8vw, 8px); }
+.char-roster { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: clamp(3px, 0.8vw, 8px); }
 .char-tile {
     --tile: #888;
     position: relative;
@@ -614,28 +614,65 @@ body.online-mode #roster-p2 { pointer-events: none; }
 }
 
 /* Selección: tarjetas de combate y ficha del personaje activo. */
-#selection-screen { background: linear-gradient(120deg,rgba(15,12,15,.96),rgba(36,19,18,.92)), url('../assets/menu-arena.jpg') center/cover; }
-.sel-grid { width: min(100%, 1080px); }
+#selection-screen { background: linear-gradient(120deg,rgba(15,12,15,.96),rgba(36,19,18,.92)), url('../assets/menu-arena.jpg') center/cover; gap: clamp(8px,1.6vh,16px); overflow-y: auto; touch-action: pan-y; }
+.selection-heading { width: min(100%,1080px); display: flex; justify-content: space-between; align-items: center; gap: 16px; padding-bottom: 8px; border-bottom: 1px solid #b5907044; color: #d6b9a5; font-size: .7rem; letter-spacing: .12em; }
+.selection-heading > span:first-child { color: #fff0dc; }
+.selection-heading b { color: #ff9b6a; }
+.sel-grid { width: min(100%, 1080px); align-items: start; }
+.sel-col { min-width: 0; }
+.sel-vs { align-self: center; }
 .sel-title { display: flex; align-items: baseline; gap: .65em; color: #f8eee1; letter-spacing: .04em; }
 .sel-title span { font: 700 .58rem var(--font-body); letter-spacing: .14em; color: #ff9b6a; }
-.selection-feature { min-height: 38px; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; padding: 5px 10px; color: #f9ecdf; background: rgba(0,0,0,.38); border-left: 3px solid var(--fighter-color,#ff6a38); }
-.selection-feature strong { font: 400 clamp(1.1rem,3.5vh,1.5rem) var(--font-display); letter-spacing: .05em; }
-.selection-feature span { color: #cdbcb3; font-size: .58rem; letter-spacing: .08em; text-align: right; }
-.selection-feature b { display: block; color: #fff2df; font-size: .7rem; }
+.selection-feature { min-height: 96px; margin-bottom: 8px; padding: 8px 10px; color: #f9ecdf; background: rgba(0,0,0,.38); border-left: 3px solid var(--fighter-color,#ff6a38); }
+.feature-identity { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-height: 25px; }
+.feature-identity strong { font: 400 clamp(1.1rem,3.5vh,1.5rem) var(--font-display); letter-spacing: .05em; }
+.feature-style { color: #cdbcb3; font-size: .68rem; line-height: 1.1; text-align: right; }
+.feature-skills { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1.2fr); gap: 10px; margin-top: 5px; }
+.feature-skill { min-width: 0; }
+.feature-skill > span { color: #bda596; font-size: .58rem; letter-spacing: .05em; line-height: 1.1; }
+.feature-skill b { display: block; color: #fff2df; font-size: .82rem; line-height: 1.05; overflow-wrap: anywhere; }
 .char-roster { gap: clamp(3px,.7vw,7px); }
-.char-tile { border: 1px solid #726059; background: #272023; box-shadow: none; }
-.tile-art { background-color: #ad9a8b; background-image: radial-gradient(circle at 50% 75%, #d4ae91, #554246); }
+.char-tile { min-height: 44px; border: 1px solid #726059; background: #272023; box-shadow: none; }
+.tile-art { max-height: 22vh; background-color: #ad9a8b; background-image: radial-gradient(circle at 50% 75%, #d4ae91, #554246); background-position: center; }
 .tile-name { color: #efe6d9; background: #221a1b; padding: 3px 5px; }
 .tile-stats { background: #e8dbca; padding: 4px; }
 .char-tile.selected { transform: translateY(-2px); border-color: var(--tile); box-shadow: 0 0 0 2px var(--tile), 0 4px 14px #0009; }
 .char-tile.selected .tile-name { background: var(--tile); color: #17100e; }
 .char-tile:hover { filter: brightness(1.12); }
-@media (max-height: 480px) and (orientation: landscape) {
-    .selection-feature { min-height: 25px; margin-bottom: 3px; padding: 1px 6px; }
-    .selection-feature strong { font-size: .95rem; }
-    .selection-feature span { font-size: .5rem; }
-    .selection-feature b { font-size: .6rem; }
-    .sel-title { font-size: 1rem; margin-bottom: 2px; }
-    .tile-art { max-height: 27vh; }
-    .combat-hint { font-size: .6rem; }
+@media (max-height: 560px) and (orientation: landscape) {
+    #selection-screen { padding: max(8px,var(--safe-t)) max(12px,var(--safe-r)) max(8px,var(--safe-b)) max(12px,var(--safe-l)); gap: 7px; }
+    .selection-heading { padding-bottom: 4px; font-size: .57rem; }
+    .sel-grid { width: min(100%,1080px); gap: 10px; }
+    .sel-title { font-size: 1rem; margin-bottom: 3px; line-height: 1; }
+    .sel-title span { font-size: .5rem; }
+    .selection-feature { min-height: 68px; margin-bottom: 5px; padding: 4px 7px; }
+    .feature-identity { min-height: 20px; gap: 4px; }
+    .feature-identity strong { font-size: 1rem; }
+    .feature-style { font-size: .6rem; max-width: 65%; }
+    .feature-skills { gap: 7px; margin-top: 2px; }
+    .feature-skill > span { font-size: .54rem; }
+    .feature-skill b { font-size: .7rem; }
+    .char-roster { gap: 4px; }
+    .tile-art { height: clamp(40px,16vh,90px); max-height: none; aspect-ratio: auto; }
+    .tile-name { padding: 2px 4px; font-size: .76rem; line-height: 1.1; }
+    .tile-stats { display: none; }
+    .sel-footer { gap: 4px 12px; }
+    .sel-footer .ink-btn { min-height: 34px; padding-top: 4px; padding-bottom: 4px; font-size: 1rem; }
+    .diff-btn { min-height: 34px; font-size: .9rem; padding: 2px 9px; }
+    .combat-hint { font-size: .6rem; line-height: 1.15; max-width: 1000px; }
+    .pc-hint { font-size: .6rem; }
+}
+@media (max-height: 350px) and (orientation: landscape) {
+    #selection-screen { gap: 5px; }
+    .selection-heading { display: none; }
+    .selection-feature { min-height: 61px; }
+    .tile-art { height: 14vh; }
+    .combat-hint { display: none; }
+}
+@media (orientation: portrait) {
+    #selection-screen { justify-content: flex-start; }
+    .selection-heading { font-size: .6rem; }
+    .sel-grid { width: 100%; }
+    .tile-art { max-height: 16vh; }
+    .selection-feature { min-height: 82px; }
 }

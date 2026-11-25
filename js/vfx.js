@@ -343,12 +343,13 @@ class VFXManager {
 
     spawnProjectile(owner, startPos, direction, config = {}) {
         const speed = config.speed || 18;
-        const color = config.color || 0x00d9ff;
+        const kind = config.kind || 'energy';
+        const color = config.color || (kind === 'red' ? 0xff244b : kind === 'rubber-shot' ? 0xff783c : 0x00d9ff);
         const size = config.size || 0.4;
 
         const group = new THREE.Group();
         const core = new THREE.Mesh(this.shared.sphere, this.shared.white);
-        core.scale.setScalar(size * 0.62);
+        core.scale.setScalar(size * (kind === 'red' ? .28 : .62));
         group.add(core);
         const glowMat = this.energyMaterial(color, 0, .75);
         const glow = new THREE.Mesh(this.shared.sphere, glowMat);
@@ -358,6 +359,7 @@ class VFXManager {
         group.add(halo);
 
         group.position.copy(startPos);
+        group.quaternion.setFromUnitVectors(this.forward, direction.clone().normalize());
         this.scene.add(group);
 
         const proj = {
@@ -368,10 +370,36 @@ class VFXManager {
             radius: size * 1.1,
             life: 2.5,
             color,
+            kind,
+            origin: startPos.clone(),
+            // Segmento recorrido en el último cuadro, usado por la colisión de
+            // disparos rápidos sin cambiar su centro visible ni su alcance.
+            prevPosition: startPos.clone(),
+            range: Number.isFinite(config.range) && config.range > 0 ? config.range : kind === 'rubber-shot' ? 6 : Infinity,
+            distance: 0,
+            rangeReached: false,
             trailTimer: 0,
             ownMaterial: glowMat,
+            ownMaterials: [glowMat, halo.material],
             halo,
         };
+        if (kind === 'rubber-shot') {
+            core.visible = glow.visible = false;
+            halo.material.opacity = .2;
+            const skin = new THREE.MeshStandardMaterial({ color: 0xd98d64, roughness: .5, metalness: .05 });
+            const fist = this.createFist(skin);
+            fist.scale.setScalar(size * 1.35);
+            const arm = new THREE.Mesh(this.shared.beam, skin);
+            arm.scale.set(size * .38, size * .38, .01);
+            const ringMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: .55,
+                depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, toneMapped: false });
+            const ring = new THREE.Mesh(this.shared.haloRing, ringMat);
+            ring.position.z = -.3;
+            ring.scale.setScalar(size * 1.6);
+            group.add(fist, arm, ring);
+            proj.special = { fist, arm, ring };
+            proj.ownMaterials.push(skin, ringMat);
+        }
         this.projectiles.push(proj);
         return proj;
     }
@@ -429,8 +457,14 @@ class VFXManager {
             duration, life: duration, color,
             grow: 0,
             sparkTimer: 0,
+            hitStart: 0,
+            hitEnd: ['hollow', 'rubber'].includes(kind) ? 0 : length,
+            hitRadius: radius,
+            hitCenter: null,
         };
         if (kind === 'hollow' || kind === 'rubber') this.decorateSpecialBeam(beam);
+        // Inicializa la silueta y la cápsula antes del primer chequeo de daño.
+        this.updateBeam(beam, 0);
         this.beams.push(beam);
         this.shake(0.6);
         this.createShockwave(new THREE.Vector3(startPos.x, 0.05, startPos.z), color, 5);
@@ -456,22 +490,9 @@ class VFXManager {
             beam.head.material = orbMat;
             beam.ownMaterials.push(orbMat);
         } else {
-            const fist = new THREE.Group();
             const haki = this.energyMaterial(0xb92318, 5, .96);
             haki.blending = THREE.NormalBlending;
-            const palm = new THREE.Mesh(this.shared.sphere, haki);
-            palm.scale.set(.75, .65, .72);
-            const thumb = new THREE.Mesh(this.shared.sphere, haki);
-            thumb.position.set(.59, -.27, .08);
-            thumb.scale.set(.28, .4, .42);
-            thumb.rotation.z = -.45;
-            fist.add(palm, thumb);
-            for (let i = 0; i < 4; i++) {
-                const knuckle = new THREE.Mesh(this.shared.sphere, haki);
-                knuckle.position.set((i - 1.5) * .34, .24, .48);
-                knuckle.scale.set(.23, .33, .28);
-                fist.add(knuckle);
-            }
+            const fist = this.createFist(haki);
             const arm = new THREE.Mesh(this.shared.beam, haki);
             beam.mesh.add(arm, fist);
             beam.special = { fist, arm, haki };
@@ -479,6 +500,34 @@ class VFXManager {
             beam.shell.visible = beam.ink.visible = beam.head.visible = false;
             beam.headGlow.material.color.setHex(0xff672c);
         }
+    }
+
+    createFist(material) {
+        const fist = new THREE.Group();
+        const palm = new THREE.Mesh(this.shared.sphere, material);
+        palm.scale.set(.75, .65, .72);
+        const thumb = new THREE.Mesh(this.shared.sphere, material);
+        thumb.position.set(.59, -.27, .08);
+        thumb.scale.set(.28, .4, .42);
+        thumb.rotation.z = -.45;
+        fist.add(palm, thumb);
+        for (let i = 0; i < 4; i++) {
+            const knuckle = new THREE.Mesh(this.shared.sphere, material);
+            knuckle.position.set((i - 1.5) * .34, .24, .48);
+            knuckle.scale.set(.23, .33, .28);
+            fist.add(knuckle);
+        }
+        return fist;
+    }
+
+    // Cápsula de daño en coordenadas longitudinales desde startPos. Se barre
+    // entre cuadros para que una punta rápida no atraviese al rival sin tocarlo.
+    updateBeamHitSegment(beam, center, radius) {
+        const previous = beam.hitCenter === null ? center : beam.hitCenter;
+        beam.hitStart = Math.min(previous, center);
+        beam.hitEnd = Math.max(previous, center);
+        beam.hitRadius = radius;
+        beam.hitCenter = center;
     }
 
     updateSpecialBeam(beam, dt, len, fade, pulse) {
@@ -509,6 +558,7 @@ class VFXManager {
             const angle = elapsed * 13;
             beam.head.position.z = z;
             beam.head.scale.setScalar(r * (.55 + fusion * .6) * pulse * fade);
+            this.updateBeamHitSegment(beam, z, beam.head.scale.x);
             beam.head.material.uniforms.uTime.value = this.clock;
             beam.head.material.uniforms.uOpacity.value = .95 * fade;
             beam.head.rotation.z = elapsed * 2;
@@ -532,6 +582,7 @@ class VFXManager {
             special.fist.position.z = z;
             special.fist.rotation.z = Math.sin(elapsed * 16) * .035;
             special.fist.scale.setScalar(r * 1.05 * fade);
+            this.updateBeamHitSegment(beam, z, special.fist.scale.x * .85);
             special.arm.scale.set(r * .36 * fade, r * .36 * fade, Math.max(.01, z));
             special.arm.position.z = z / 2;
         }
@@ -555,8 +606,7 @@ class VFXManager {
     removeProjectile(index) {
         const p = this.projectiles[index];
         this.scene.remove(p.mesh);
-        p.ownMaterial.dispose();
-        p.halo.material.dispose();
+        p.ownMaterials.forEach(material => material.dispose());
         this.projectiles.splice(index, 1);
     }
 
@@ -766,13 +816,25 @@ class VFXManager {
             const proj = this.projectiles[i];
             proj.life -= dt;
             const pos = proj.mesh.position;
-            if (proj.life <= 0 || Math.abs(pos.x) > 16 || Math.abs(pos.z) > 11) {
+            if (proj.life <= 0 || proj.rangeReached || Math.abs(pos.x) > 16 || Math.abs(pos.z) > 11) {
                 this.removeProjectile(i);
                 continue;
             }
-            pos.addScaledVector(proj.velocity, dt);
+            const speed = proj.velocity.length();
+            const distance = Math.min(speed * dt, Math.max(0, proj.range - proj.distance));
+            proj.prevPosition.copy(pos);
+            if (speed > 0) pos.addScaledVector(proj.velocity, distance / speed);
+            proj.distance += distance;
+            proj.rangeReached = proj.distance >= proj.range;
             proj.ownMaterial.uniforms.uTime.value = this.clock;
-            proj.halo.scale.setScalar(proj.radius * (4 + Math.sin(this.clock * 28) * .2));
+            proj.halo.scale.setScalar(proj.radius * ((proj.kind === 'rubber-shot' ? 2.7 : 4) + Math.sin(this.clock * 28) * .2));
+            if (proj.special) {
+                proj.special.arm.scale.z = Math.max(.01, proj.distance);
+                proj.special.arm.position.z = -proj.distance / 2;
+                proj.special.ring.scale.setScalar(proj.radius * (1.3 + Math.sin(this.clock * 25) * .12));
+                proj.special.ring.material.opacity = .4;
+                proj.special.fist.rotation.z = Math.sin(this.clock * 18) * .04;
+            }
             proj.trailTimer += dt;
             if (proj.trailTimer > 0.03) {
                 proj.trailTimer = 0;

@@ -42,6 +42,9 @@ class ModelLoader {
             naruto: { clip: 'Armature|Armature|walking_man|baselayer', time: 0 },
             vegeta: { clip: 'Armature|Armature.001|mixamo.com|Layer0', time: 0 },
             tanjiro: {},
+            // standing tiene pies apoyados y brazos relajados; su torso mira 0.30 rad a la izquierda.
+            luffy: { clip: 'standing', time: 0.5, yaw: 0.30 },
+            gojo: {},
             pikachu: { clip: 'Impactrueno', time: 2.2 },
             charizard: { clip: 'Chariard_dizzy', time: 0 },
         };
@@ -109,6 +112,21 @@ class ModelLoader {
     prepareStyle(type, gltf) {
         const meshes = [];
         gltf.scene.traverse(o => { if (o.isMesh) meshes.push(o); });
+        if (type === 'gojo') {
+            // La publicación incluye una pose de ilustración y dos esferas de chakra.
+            // Recuperar la A-pose real de los inverse binds conserva el skin y permite
+            // animar las piernas; las esferas se sustituyen por los VFX dinámicos del juego.
+            const skeletons = new Set(meshes.filter(m => m.isSkinnedMesh).map(m => m.skeleton));
+            skeletons.forEach(skeleton => skeleton.pose());
+            gltf.scene.updateMatrixWorld(true);
+            for (let i = meshes.length - 1; i >= 0; i--) {
+                const mesh = meshes[i];
+                if (!mesh.isSkinnedMesh && ['Material.001', 'Material.002'].includes(mesh.material.name)) {
+                    if (mesh.parent) mesh.parent.remove(mesh);
+                    meshes.splice(i, 1);
+                }
+            }
+        }
         meshes.forEach(mesh => {
             const old = mesh.material;
             if (old.name === 'LINE') return;

@@ -179,7 +179,7 @@ class Game {
     // Antes de elegir luchador, los cuatro quedan posando detrás del título.
     showTitleBackdrop() {
         this.clearBackdrop();
-        const types = Object.keys(FIGHTER_STATS);
+        const types = ['goku', 'vegeta', 'naruto', 'tanjiro', 'pikachu', 'charizard'];
         this.backdrop = types.map((type, i) => {
             const f = new Fighter(type, true, this.scene, this.vfx, {});
             f.position.set(0.8 + i * 2.35, 0, -1 + (i % 2) * 1.2);
@@ -563,11 +563,20 @@ class Game {
 
             const hp = target.position.clone();
             hp.y = target.stats.muzzleY;
-            if (p.mesh.position.distanceTo(hp) < p.radius + target.stats.hitRadius) {
+            let contact = p.mesh.position;
+            if (p.prevPosition) {
+                const path = p.mesh.position.clone().sub(p.prevPosition);
+                const lenSq = path.lengthSq();
+                if (lenSq > .00001) {
+                    const along = hp.clone().sub(p.prevPosition).dot(path) / lenSq;
+                    contact = path.multiplyScalar(THREE.MathUtils.clamp(along, 0, 1)).add(p.prevPosition);
+                }
+            }
+            if (contact.distanceTo(hp) < p.radius + target.stats.hitRadius) {
                 const dealt = target.receiveHit({ amount: p.damage, attacker: p.owner, kind: 'shot' });
                 // Con invulnerabilidad el proyectil sigue de largo: esquivar se nota
                 if (dealt <= 0) continue;
-                this.vfx.createHitSparks(p.mesh.position, p.color, 14);
+                this.vfx.createHitSparks(contact, p.color, 14);
                 window.soundManager.playPunch(false);
                 this.onFighterHit(p.owner, target, dealt, { kind: 'shot' });
                 this.vfx.removeProjectile(i);
@@ -592,17 +601,30 @@ class Game {
         for (const b of this.vfx.beams) {
             const target = this.opponentOf(b.owner);
             if (!target || target.isDead) continue;
+            const singleImpact = b.kind === 'hollow' || b.kind === 'rubber';
+            if (singleImpact && b.connected) continue;
             const toT = target.position.clone().sub(b.startPos);
             toT.y = 0;
             const along = toT.dot(b.direction);
-            if (along < 0 || along > b.length) continue;
-            const lateral = toT.addScaledVector(b.direction, -along).length();
-            if (lateral > b.radius + target.stats.hitRadius * 0.7) continue;
+            if (along < 0) continue;
+            if (!singleImpact && along > b.length) continue;
+            const nearest = singleImpact ? THREE.MathUtils.clamp(along, b.hitStart, b.hitEnd) : along;
+            const lateral = toT.addScaledVector(b.direction, -nearest).length();
+            const radius = singleImpact ? b.hitRadius : b.radius;
+            if (lateral > radius + target.stats.hitRadius * 0.7) continue;
 
             const dealt = target.receiveHit({
-                amount: (b.damage / b.duration) * dt, attacker: b.owner, kind: 'beam', continuous: true,
+                amount: singleImpact ? b.damage : (b.damage / b.duration) * dt,
+                attacker: b.owner, kind: 'beam', continuous: !singleImpact, heavy: singleImpact,
             });
             if (dealt <= 0) continue;
+            if (singleImpact) {
+                b.connected = true;
+                this.vfx.createHitSparks(target.position.clone().setY(target.stats.muzzleY), b.color, 26);
+                this.vfx.shake(.55);
+                this.onFighterHit(b.owner, target, dealt, { kind: 'beam', heavy: true });
+                continue;
+            }
             if (b.owner === this.player) this.stats.playerDamageDealt += dealt;
             else {
                 this.rivalStats.dmg += dealt;

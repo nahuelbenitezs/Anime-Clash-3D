@@ -71,6 +71,7 @@ class FighterAI {
         const s = this.self, f = this.foe, p = this.profile;
         const roll = Math.random();
         const ultReady = s.ki >= s.stats.ult.cost;
+        const blastReady = s.ki >= s.stats.blast.cost && dist <= (s.stats.blast.range ?? Infinity);
         const foeOpen = f.state === 'hurt' || f.state === 'charge' || f.state === 'blast';
 
         this.planTimer = this.level.think * (0.7 + Math.random() * 0.8);
@@ -89,12 +90,12 @@ class FighterAI {
         }
         if (tooClose) { this.plan = 'retreat'; return; }
         if (farAway) {
-            if (s.ki >= s.stats.blast.cost && roll < p.blastBias) { this.plan = 'shoot'; return; }
+            if (blastReady && roll < p.blastBias) { this.plan = 'shoot'; return; }
             if (s.ki < p.chargeBelow && dist > 6 && roll < p.blastBias + 0.35) { this.plan = 'charge'; this.planTimer = 0.7 + Math.random() * 0.5; return; }
             this.plan = 'approach';
             return;
         }
-        if (s.ki >= s.stats.blast.cost && roll < p.blastBias) { this.plan = 'shoot'; return; }
+        if (blastReady && roll < p.blastBias) { this.plan = 'shoot'; return; }
         this.plan = dist > s.stats.reach ? 'approach' : 'strafe';
     }
 
@@ -157,7 +158,7 @@ class FighterAI {
             }
             case 'shoot': {
                 s.chargeKi(false);
-                s.shootBlast(f);
+                if (dist <= (s.stats.blast.range ?? Infinity)) s.shootBlast(f);
                 s.move(0, 0, dt);
                 this.plan = 'wait';
                 break;

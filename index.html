@@ -10,7 +10,7 @@
     <title>Anime Clash 3D</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Bangers&family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=graphics-3">
+<link rel="stylesheet" href="css/style.css?v=roster-4">
     <!-- Three.js + Loaders -->
     <script src="vendor/three.min.js"></script>
     <script src="vendor/GLTFLoader.js"></script>
@@ -74,7 +74,7 @@
             <div class="stage-caption"><span>COMBATE 3D</span><strong>LA ARENA TE ESPERA</strong><span>✦</span></div>
         </div>
     </main>
-    <footer class="title-footer"><div class="title-footer-left"><span class="footer-dot"></span> 6 LUCHADORES <span class="footer-divider">/</span> 1 VS 1 <span class="footer-divider">/</span> CPU + ONLINE</div><p class="title-legal">Proyecto de fans sin fines de lucro · Personajes de sus respectivos dueños</p></footer>
+    <footer class="title-footer"><div class="title-footer-left"><span class="footer-dot"></span> <span data-roster-count></span> LUCHADORES <span class="footer-divider">/</span> 1 VS 1 <span class="footer-divider">/</span> CPU + ONLINE</div><p class="title-legal">Proyecto de fans sin fines de lucro · Personajes de sus respectivos dueños</p></footer>
 </div>
 
 <!-- ═══════════════ ONLINE ═══════════════ -->
@@ -101,17 +101,18 @@
 
 <!-- ═══════════════ SELECTION SCREEN ═══════════════ -->
 <div id="selection-screen" class="overlay hidden">
+    <header class="selection-heading"><span>SELECCIÓN DE LUCHADOR</span><span><b data-roster-count></b> LUCHADORES · 1 VS 1</span></header>
     <div class="sel-grid">
         <section class="sel-col">
             <h2 class="sel-title"><span>01 / JUGADOR</span> ELEGÍ TU LUCHADOR</h2>
             <div class="selection-feature" id="feature-p1" aria-live="polite"></div>
-            <div class="char-roster" id="roster-p1"></div>
+            <div class="char-roster" id="roster-p1" role="group" aria-label="Tu luchador"></div>
         </section>
         <div class="sel-vs" aria-hidden="true">VS</div>
         <section class="sel-col">
             <h2 class="sel-title" id="sel-title-rival">02 / RIVAL</h2>
             <div class="selection-feature" id="feature-p2" aria-live="polite"></div>
-            <div class="char-roster" id="roster-p2"></div>
+            <div class="char-roster" id="roster-p2" role="group" aria-label="Luchador rival"></div>
         </section>
     </div>
     <div class="sel-footer">
@@ -221,19 +222,19 @@
 
 <!-- ═══════════════ SCRIPTS ═══════════════ -->
 <script src="js/audio.js"></script>
-<script src="js/model_loader.js"></script>
+<script src="js/model_loader.js?v=roster-4"></script>
 <script src="js/arena.js?v=graphics-3"></script>
-<script src="js/vfx.js?v=graphics-3"></script>
-<script src="js/roster.js?v=graphics-3"></script>
-<script src="js/rig.js?v=graphics-3"></script>
+<script src="js/vfx.js?v=roster-4"></script>
+<script src="js/roster.js?v=roster-4"></script>
+<script src="js/rig.js?v=roster-4"></script>
 <script src="js/vegeta.js"></script>
-<script src="js/characters.js?v=graphics-3"></script>
-<script src="js/ai.js"></script>
+<script src="js/characters.js?v=roster-4"></script>
+<script src="js/ai.js?v=roster-4"></script>
 <script src="js/controls.js"></script>
-<script src="js/portraits.js"></script>
-<script src="js/game.js?v=graphics-3"></script>
+<script src="js/portraits.js?v=roster-4"></script>
+<script src="js/game.js?v=roster-4"></script>
 <script src="js/presentation.js?v=graphics-3"></script>
 <script src="js/online.js"></script>
-<script src="js/main.js"></script>
+<script src="js/main.js?v=roster-4"></script>
 </body>
 </html>

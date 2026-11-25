@@ -1,5 +1,5 @@
 const fs=require('fs'),vm=require('vm'),assert=require('assert');global.THREE=require('../vendor/three.min.js');global.window=global;window.soundManager={startKiCharge(){},stopKiCharge(){},playPunch(){},playDash(){},playExplosion(){},playUltimateBeam(){},playBlast(){}};
-for(const p of ['js/roster.js','js/rig.js','js/characters.js','js/online.js']) vm.runInThisContext(fs.readFileSync(p,'utf8'),{filename:p});
+for(const p of ['js/roster.js','js/rig.js','js/characters.js','js/online.js','js/game.js']) vm.runInThisContext(fs.readFileSync(p,'utf8'),{filename:p});
 const vfx={emitAura(){},emitLightning(){},createHitSparks(){},shake(){},spawnBeam(){},spawnProjectile(){}};
 function fighter(x){let f=Object.create(Fighter.prototype);Object.assign(f,{type:'goku',stats:FIGHTER_STATS.goku,isPlayer:x<0,position:new THREE.Vector3(x,0,0),velocity:new THREE.Vector3(),dashDir:new THREE.Vector3(),group:new THREE.Group(),state:'idle',stateTimer:0,rotationY:x<0?Math.PI/2:-Math.PI/2,targetRotationY:x<0?Math.PI/2:-Math.PI/2,health:150,maxHealth:150,ki:30,maxKi:100,speed:6.6,attackCd:0,blastCd:0,dashCd:0,comboWindow:0,dashInvuln:0,invuln:0,perfectGuard:0,sparking:false,sparkingCharge:0,dragonDash:false,pendingHit:null,pendingUlt:null,isDead:false,isCharging:false,events:{},vfx,bodyOffset:{y:0,z:0,rx:0,ry:0,rz:0}});f.updatePose=()=>{};return f}
 let a=fighter(-4),b=fighter(4);a.ki=14;assert.equal(a.rush(b),false);assert.equal(a.ki,14);a.ki=50;assert.equal(a.rush(b),true);assert.equal(a.ki,35);let start=a.position.x;a.update(.1,b);assert(a.position.x>start);assert.equal(a.dragonDash,true);
@@ -24,3 +24,34 @@ let released=0,sharedDisposed=0;const sharedMaterial=new THREE.MeshBasicMaterial
 const mesh=new THREE.Mesh(new THREE.BoxGeometry(),sharedMaterial);mesh.skeleton={dispose(){released++}};a.glbModel.add(mesh);a.group.add(a.glbModel);
 a.dispose();a.dispose();assert.equal(released,1);assert.equal(sharedDisposed,0);assert.equal(a.scene.children.length,0);
 console.log('OK: limpieza de esqueletos sin destruir materiales compartidos');
+
+// Prueba el daño a través de la misma función que usa la partida del anfitrión.
+for (const type of ['gojo', 'luffy']) {
+    const caster = fighter(-4), rival = fighter(3);
+    caster.type = type;
+    caster.stats = FIGHTER_STATS[type];
+    let beam;
+    caster.vfx = { ...vfx, spawnBeam(owner, startPos, direction, config) {
+        beam = { owner, startPos, direction, ...config, hitStart: 0, hitEnd: 0, hitRadius: config.radius };
+    } };
+    caster.ki = 100;
+    assert(caster.triggerUltimate(rival));
+    assert.equal(caster.ki, 100 - caster.stats.ult.cost);
+    caster.update(caster.stats.ult.windup + .01, rival);
+    assert.equal(beam.kind, caster.stats.ult.kind);
+    const game = Object.assign(Object.create(Game.prototype), {
+        player: caster, enemy: rival, vfx: { ...vfx, beams: [beam], projectiles: [] }, onFighterHit() {},
+    });
+    game.checkCollisions(1 / 60);
+    assert.equal(rival.health, rival.maxHealth, 'el efecto todavía no llegó');
+    beam.hitStart = 3;
+    beam.hitEnd = 7;
+    rival.dashInvuln = .1;
+    game.checkCollisions(1 / 60);
+    assert.equal(rival.health, rival.maxHealth, 'la esquiva evita el impacto');
+    rival.dashInvuln = 0;
+    game.checkCollisions(1 / 60);
+    game.checkCollisions(1 / 60);
+    assert.equal(rival.health, rival.maxHealth - caster.stats.ult.damage, 'aplica un solo impacto');
+}
+console.log('OK: Púrpura y King Kong Gun alcanzan al rival y aplican un solo impacto');

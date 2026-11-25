@@ -54,6 +54,8 @@ La conexión es directa entre los dos navegadores. El servicio público y gratui
 | Tanjiro | 138 | Ágil, mayor alcance | Respiración del agua: ataque de energía |
 | Pikachu | 122 | Rápido, cuerpo chico y ki barato | Impactrueno: rayo eléctrico fino y de carga rápida |
 | Charizard | 152 | Pesado, más alcance | Lanzallamas: llamarada corta y ancha |
+| Gojo | 136 | Control a distancia con Rojo | Púrpura: esfera que hace daño al tocar al rival |
+| Luffy | 145 | Presión con el alcance de Gomu Gomu: Pistola | King Kong Gun: un puño gigante con Haki |
 
 La CPU tiene tres niveles (fácil, normal y difícil) y juega con las mismas reglas que vos: mismos enfriamientos, mismo ki y mismo daño. Lo que cambia es cuánto tarda en reaccionar y con qué frecuencia esquiva o se cubre.
 
@@ -118,6 +120,9 @@ Las persecuciones, defensas precisas y el estado de poder son adaptaciones propi
 Las reglas básicas de estas mecánicas se pueden comprobar con `node tests/combat-check.cjs`.
 
 ## Créditos
+
+- [Satoru Gojo (Shinjuku battle version)](https://sketchfab.com/3d-models/satoru-gojo-shinjuku-battle-version-jjk-afb43273284848f79637f1bf71b9b361), de [shamus](https://sketchfab.com/consistent_models), bajo [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Adapté la pose y oculté los efectos incorporados para animarlo en el juego.
+- [Monkey D. Luffy](https://sketchfab.com/3d-models/monkey-d-luffy-3d9fb8bd86854aa69ee6f69fcbeaca51), de [nitwit.friends](https://sketchfab.com/nitwit.friends), bajo [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Empaquetado como GLB desde la [copia pública con atribución](https://huggingface.co/datasets/fernandotonon/QtMeshEditor-motion-corpus/tree/main/raw/sketchfab/Monkey_D._Luffy_3d9fb8bd) y adaptado al sistema de poses del juego.
 
 - Modelos 3D de Goku, Pikachu y Charizard: obtenidos de terceros, sin autoría registrada en este repositorio.
 - [Naruto Walking](https://sketchfab.com/3d-models/naruto-walking-3d-animation-by-sg-studio-505860183544421a898c132d09dcd2b7), de Nytherix (SG Studio); [Vegeta](https://sketchfab.com/3d-models/vegeta-d43230bed9964b9aaa7671b752e8d608), de Muhammad; y [Tanjiro Kamado](https://sketchfab.com/3d-models/tanjiro-kamado-from-demon-slayer-fully-rigged-0ab5b317b7654fd29255d22182537ded), de Light.k: [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Adaptados para el juego.
